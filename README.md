@@ -40,6 +40,27 @@ Ce script réentraîne sur les 801 Pokémon la configuration choisie dans
 
 Les modèles fournis dans le dépôt sont déjà entraînés : l'appli les charge sans rien réentraîner.
 
+## Lancer l'application
+
+```bash
+streamlit run app.py
+```
+
+L'appli s'ouvre dans le navigateur (http://localhost:8501). Onglet **Statistiques** (niveau 1) :
+choisir un Pokémon existant pour préremplir les 6 stats, ou les saisir librement. L'appli affiche :
+- le **groupe** (cluster) avec son nom et son interprétation ;
+- la **probabilité d'être légendaire** (calibrée), avec le verdict « légendaire probable » au-dessus du seuil ;
+- le **type prédit** et les 3 types les plus probables ;
+- un **radar** des stats comparé au profil moyen du groupe, et les Pokémon existants les plus proches.
+
+Les onglets Image, Caméra et Pokédex sont réservés aux niveaux 2 et 3.
+
+## Tests
+
+```bash
+python -m pytest
+```
+
 ## Structure
 
 ```
@@ -51,12 +72,14 @@ src/config.py             graine (42), chemins, colonnes utilisées / exclues
 src/preprocessing.py      chargement, nettoyage, split stratifié, prétraitement
 src/clustering.py         noms et interprétation des clusters
 src/viz.py                style graphique commun
+src/pokedex_data.py       chargement des modèles et prédictions pour l'appli
 src/train_tabular.py      entraîne et sauvegarde les modèles du niveau 1
-src/train_images.py, src/image_utils.py, src/pokedex_data.py   (niveaux 2 et 3, à venir)
+src/train_images.py, src/image_utils.py   (niveau 2, à venir)
 models/                   modèles sauvegardés (.joblib, .pt)
 reports/figures/          figures exportées pour le rapport
 reports/tables/           tableaux récapitulatifs (CSV) pour le rapport
-app.py                    application Pokédex Streamlit (à venir)
+app.py                    application Pokédex Streamlit
+tests/                    tests des prédictions (pytest)
 ```
 
 Exécuter le notebook : `jupyter notebook notebooks/1_tabulaire.ipynb`

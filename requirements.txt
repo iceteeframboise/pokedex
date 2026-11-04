@@ -10,3 +10,4 @@ plotly==7.1.0
 streamlit==1.66.1
 joblib==1.6.0
 jupyter
+pytest==9.2.0
