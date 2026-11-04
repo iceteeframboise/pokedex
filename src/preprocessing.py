@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
@@ -152,7 +153,31 @@ def split_train_test(df: pd.DataFrame, stratify_col: str = TARGET_LEGENDARY,
 # ==========================================================================
 # 4. Pré-traitement « apprenant » (à mettre DANS un Pipeline)
 # ==========================================================================
-def make_preprocessor(variant: str = "stats") -> Pipeline | ColumnTransformer:
+class AddTotal(BaseEstimator, TransformerMixin):
+    """Ajoute la colonne « total » = somme des 6 stats (ingénierie de variable).
+
+    Ce n'est PAS une fuite : le total se calcule à partir des seules entrées
+    de l'appli. Pour un modèle linéaire, il est redondant (combinaison
+    linéaire des 6 stats). Mais un arbre ne coupe que sur UNE variable à la
+    fois (« attack > 100 ? ») : il ne sait pas former une somme par lui-même.
+    Lui donner le total lui permet d'apprendre directement une règle du type
+    « total >= 570 ».
+    """
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        X = pd.DataFrame(X, columns=STATS) if not isinstance(X, pd.DataFrame) else X.copy()
+        X["total"] = X[STATS].sum(axis=1)
+        return X
+
+    def get_feature_names_out(self, input_features=None):
+        cols = list(input_features) if input_features is not None else list(STATS)
+        return np.array(cols + ["total"], dtype=object)
+
+
+def make_preprocessor(variant: str = "stats", with_total: bool = False) -> Pipeline:
     """Construit le pré-traitement à placer en tête de chaque Pipeline.
 
     Standardisation (z-score) : z = (x - moyenne) / écart-type, calculés sur
@@ -171,10 +196,15 @@ def make_preprocessor(variant: str = "stats") -> Pipeline | ColumnTransformer:
     Pokémon géants), on applique log(1 + x) avant la standardisation, et on
     remplace les valeurs manquantes par la médiane du train (robuste aux
     valeurs extrêmes, contrairement à la moyenne).
+
+    with_total=True ajoute d'abord la colonne « total » (voir AddTotal).
     """
+    stats_cols = STATS + (["total"] if with_total else [])
+    first = [("total", AddTotal())] if with_total else []
+
     if variant == "stats":
         # Les 6 stats n'ont aucune valeur manquante : on standardise seulement.
-        return Pipeline([("scaler", StandardScaler())])
+        return Pipeline(first + [("scaler", StandardScaler())])
 
     if variant == "stats_phys":
         phys = Pipeline([
@@ -182,10 +212,10 @@ def make_preprocessor(variant: str = "stats") -> Pipeline | ColumnTransformer:
             ("log1p", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
             ("scaler", StandardScaler()),
         ])
-        return ColumnTransformer([
-            ("stats", StandardScaler(), STATS),
+        return Pipeline(first + [("columns", ColumnTransformer([
+            ("stats", StandardScaler(), stats_cols),
             ("phys", phys, PHYSICAL),
-        ])
+        ]))])
 
     raise ValueError(f"Variante inconnue : {variant!r}")
 

@@ -72,7 +72,7 @@ LEAKY_COLS = {
     "percentage_male": "manquant pour les Pokémon asexués, dont la plupart des légendaires",
     "classfication": "texte descriptif (ex. « Legendary Pokémon »)",
     "pokedex_number": "les légendaires sont regroupés en fin de génération",
-    "base_total": "somme exacte des 6 stats : redondante (combinaison linéaire)",
+    "base_total": "somme exacte des 6 stats : colonne redondante, recalculée dans le pipeline (AddTotal)",
     "abilities": "talents spécifiques aux légendaires (ex. « Pressure »)",
     "japanese_name": "identifiant, aucune information généralisable",
     "name": "identifiant, aucune information généralisable",
