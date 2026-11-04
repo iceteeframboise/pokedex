@@ -1,0 +1,117 @@
+{
+  "0": {
+    "key": "rapides",
+    "name": "Attaquants rapides",
+    "description": "Vitesse très élevée, attaques correctes, défenses moyennes : ils frappent en premier mais encaissent mal (Électrik, Vol, Insecte évolués…).",
+    "color": "#eda100",
+    "effectif": 188,
+    "pct_legendaires": 2.6595744680851063,
+    "profil_moyen": {
+      "hp": 67.84574468085107,
+      "attack": 84.50531914893617,
+      "defense": 67.97872340425532,
+      "sp_attack": 77.40957446808511,
+      "sp_defense": 71.59042553191489,
+      "speed": 93.31914893617021
+    },
+    "exemples": [
+      "Golbat",
+      "Swanna",
+      "Girafarig",
+      "Froslass",
+      "Stantler"
+    ]
+  },
+  "1": {
+    "key": "faibles",
+    "name": "Pokémon faibles / non évolués",
+    "description": "Toutes les stats sous la moyenne. Ce sont surtout des Pokémon de base ou de premier stade (Chenipan, Rattata, starters avant évolution) : ils doivent évoluer pour devenir forts.",
+    "color": "#1baf7a",
+    "effectif": 297,
+    "pct_legendaires": 0.33670033670033667,
+    "profil_moyen": {
+      "hp": 50.13131313131313,
+      "attack": 53.94276094276094,
+      "defense": 50.86868686868687,
+      "sp_attack": 47.91245791245791,
+      "sp_defense": 48.53872053872054,
+      "speed": 49.323232323232325
+    },
+    "exemples": [
+      "Snorunt",
+      "Ditto",
+      "Inkay",
+      "Grubbin",
+      "Larvitar"
+    ]
+  },
+  "2": {
+    "key": "endurants",
+    "name": "Colosses à PV",
+    "description": "Énorme réserve de PV et bonne Attaque, défenses dans la moyenne, plutôt lents : ils encaissent grâce à leurs PV plutôt qu'à leur armure.",
+    "color": "#e87ba4",
+    "effectif": 100,
+    "pct_legendaires": 4.0,
+    "profil_moyen": {
+      "hp": 109.45,
+      "attack": 95.06,
+      "defense": 76.91,
+      "sp_attack": 74.63,
+      "sp_defense": 76.97,
+      "speed": 56.62
+    },
+    "exemples": [
+      "Whiscash",
+      "Seismitoad",
+      "Swalot",
+      "Exploud",
+      "Piloswine"
+    ]
+  },
+  "3": {
+    "key": "tanks",
+    "name": "Tanks défensifs",
+    "description": "Défense (et souvent Défense spéciale) très élevée, Vitesse faible : lents mais très résistants. Beaucoup de types Roche et Acier.",
+    "color": "#008300",
+    "effectif": 93,
+    "pct_legendaires": 3.225806451612903,
+    "profil_moyen": {
+      "hp": 65.43010752688173,
+      "attack": 87.86021505376344,
+      "defense": 122.53763440860214,
+      "sp_attack": 63.913978494623656,
+      "sp_defense": 89.88172043010752,
+      "speed": 45.96774193548387
+    },
+    "exemples": [
+      "Marowak",
+      "Crustle",
+      "Mawile",
+      "Metang",
+      "Klang"
+    ]
+  },
+  "4": {
+    "key": "elite",
+    "name": "Puissants / quasi-légendaires",
+    "description": "Toutes les stats nettement au-dessus de la moyenne, en particulier l'Attaque spéciale et la Défense spéciale. Ce groupe rassemble la grande majorité des légendaires, les pseudo-légendaires (Dracolosse, Métalosse…) et les méga-évolutions.",
+    "color": "#6250d6",
+    "effectif": 123,
+    "pct_legendaires": 46.34146341463415,
+    "profil_moyen": {
+      "hp": 85.869918699187,
+      "attack": 103.89430894308943,
+      "defense": 93.53658536585365,
+      "sp_attack": 121.34959349593495,
+      "sp_defense": 104.6260162601626,
+      "speed": 89.46341463414635
+    },
+    "exemples": [
+      "Hydreigon",
+      "Mesprit",
+      "Moltres",
+      "Heatran",
+      "Zapdos"
+    ]
+  }
+}

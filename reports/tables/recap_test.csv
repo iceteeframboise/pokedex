@@ -1,0 +1,3 @@
+,jeu de test,scores
+Légendaire : boosting recalibré,161 Pokémon (14 légendaires),ROC-AUC 0.992 | PR-AUC 0.935 | F1 0.839 | rappel 0.929 | précision 0.765
+Type : SVM calibré,160 Pokémon (17 types),accuracy 0.225 | F1 macro 0.142 | top-3 0.556 | log-loss 2.378

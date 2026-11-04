@@ -1,0 +1,72 @@
+{
+  "date_entrainement": "2026-11-04T23:29:49+00:00",
+  "random_state": 42,
+  "n_pokemon": 801,
+  "entrees": [
+    "hp",
+    "attack",
+    "defense",
+    "sp_attack",
+    "sp_defense",
+    "speed"
+  ],
+  "clustering": {
+    "methode": "KMeans",
+    "k": 5,
+    "n_init": 20
+  },
+  "legendaire": {
+    "modele": "HistGradientBoosting (6 stats + total) + calibration sigmoïde",
+    "hyperparametres": {
+      "learning_rate": 0.1,
+      "max_depth": 3,
+      "max_iter": 100,
+      "min_samples_leaf": 5
+    },
+    "seuil": 0.2434603458740343,
+    "seuil_choisi_par": "F1 maximal, probabilités hors échantillon (CV 5 plis)",
+    "perf_au_seuil_hors_echantillon": {
+      "f1": 0.8098159509202454,
+      "precision": 0.7096774193548387,
+      "recall": 0.9428571428571428,
+      "f1_a_0.5": 0.7482014388489209
+    },
+    "taux_legendaires": 0.08739076154806492
+  },
+  "type": {
+    "modele": "SVC RBF + calibration sigmoïde",
+    "hyperparametres": {
+      "C": 10,
+      "gamma": 0.03
+    },
+    "classes": [
+      "bug",
+      "dark",
+      "dragon",
+      "electric",
+      "fairy",
+      "fighting",
+      "fire",
+      "ghost",
+      "grass",
+      "ground",
+      "ice",
+      "normal",
+      "poison",
+      "psychic",
+      "rock",
+      "steel",
+      "water"
+    ],
+    "types_exclus": [
+      "flying"
+    ],
+    "n_pokemon": 798
+  },
+  "versions": {
+    "python": "3.13.18",
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.3",
+    "joblib": "1.6.0"
+  }
+}
