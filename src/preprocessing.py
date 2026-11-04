@@ -48,7 +48,7 @@ def load_raw(path: str | Path = DATA_PATH) -> pd.DataFrame:
 def _parse_capture_rate(value) -> float:
     """Convertit capture_rate en nombre.
 
-    Une ligne (Minior) vaut « 30 (Meteorite)255 (Minior) » : deux formes du
+    Une ligne (Minior) vaut « 30 (Meteorite)255 (Core) » : deux formes du
     même Pokémon ont deux taux. On garde le premier nombre (30, forme
     Météore, la forme par défaut). La colonne est de toute façon exclue des
     modèles (fuite de données) ; on la répare seulement pour l'EDA.

@@ -81,3 +81,12 @@ LEAKY_COLS = {
 # fonction déterministe du (type1, type2) : elles « trichent » pour la
 # prédiction du type et n'existent pas dans l'entrée de l'appli.
 LEAKY_PREFIXES = ("against_",)
+
+# Noms français des types (affichage uniquement ; les données restent en anglais)
+TYPE_FR = {
+    "bug": "Insecte", "dark": "Ténèbres", "dragon": "Dragon", "electric": "Électrik",
+    "fairy": "Fée", "fighting": "Combat", "fire": "Feu", "flying": "Vol",
+    "ghost": "Spectre", "grass": "Plante", "ground": "Sol", "ice": "Glace",
+    "normal": "Normal", "poison": "Poison", "psychic": "Psy", "rock": "Roche",
+    "steel": "Acier", "water": "Eau", "aucun": "(aucun)",
+}
