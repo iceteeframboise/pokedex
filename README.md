@@ -24,12 +24,19 @@ python -m src.preprocessing
 ## Structure
 
 ```
-data/            pokemon.csv
-notebook/        pokedex_niveau1.ipynb (analyse complète, commentée)
-src/config.py    graine (42), chemins, colonnes utilisées / exclues
-src/preprocessing.py  chargement, nettoyage, split stratifié, pré-traitement
-src/train.py     entraîne et sauvegarde les modèles (à venir)
-models/          modèles .joblib
-reports/figures/ figures pour le rapport
-app.py           application Pokédex (à venir)
+data/pokemon.csv          dataset Kaggle (801 Pokémon)
+data/images/              images de la 1re génération (niveau 2, à venir)
+notebooks/1_tabulaire.ipynb   niveau 1 : EDA, clustering, classification (commenté)
+notebooks/2_images.ipynb      niveau 2 : images (à venir)
+src/config.py             graine (42), chemins, colonnes utilisées / exclues
+src/preprocessing.py      chargement, nettoyage, split stratifié, prétraitement
+src/clustering.py         noms et interprétation des clusters
+src/viz.py                style graphique commun
+src/train_tabular.py      entraîne et sauvegarde les modèles du niveau 1 (à venir)
+src/train_images.py, src/image_utils.py, src/pokedex_data.py   (niveaux 2 et 3, à venir)
+models/                   modèles sauvegardés (.joblib, .pt)
+reports/figures/          figures exportées pour le rapport
+app.py                    application Pokédex Streamlit (à venir)
 ```
+
+Exécuter le notebook : `jupyter notebook notebooks/1_tabulaire.ipynb`
