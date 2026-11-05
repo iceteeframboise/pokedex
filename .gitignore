@@ -7,3 +7,4 @@ __pycache__/
 # Images du niveau 2 (3 Go) : téléchargées par src/image_utils.py, jamais versionnées
 data/images/
 data/images_clean/
+data/cache/

@@ -382,3 +382,113 @@ def make_splits(images: pd.DataFrame, seed: int = 42, n_folds: int = 5) -> pd.Da
 
 def load_splits() -> pd.DataFrame:
     return pd.read_csv(SPLITS_PATH, keep_default_na=False)
+
+
+# ==========================================================================
+# 7. Caractéristiques « classiques » (référence sans réseau de neurones)
+# ==========================================================================
+CACHE_DIR = ROOT_DIR / "data" / "cache"
+HIST_BINS = (12, 4, 4)       # teinte x saturation x valeur
+HOG_SIZE = 64
+
+
+def color_histogram(img: Image.Image, bins=HIST_BINS, white_thresh: int = 235) -> np.ndarray:
+    """Histogramme de couleurs HSV normalisé, calculé SUR LE POKÉMON seulement.
+
+    Les pixels presque blancs (fond ajouté au nettoyage ou fond d'origine)
+    sont exclus : sinon le fond dominerait l'histogramme. HSV sépare la teinte
+    (H, « quelle couleur »), la saturation (S, « couleur vive ou terne ») et la
+    valeur (V, « clair ou sombre ») : c'est plus proche de la perception que RGB.
+    """
+    rgb = np.asarray(img.convert("RGB").resize((96, 96)))
+    mask = ~(rgb.min(axis=2) >= white_thresh)
+    hsv = np.asarray(img.convert("RGB").resize((96, 96)).convert("HSV")).reshape(-1, 3)[mask.ravel()]
+    if len(hsv) < 20:                                   # image presque entièrement blanche
+        hsv = np.asarray(img.convert("RGB").resize((96, 96)).convert("HSV")).reshape(-1, 3)
+    h, _ = np.histogramdd(hsv, bins=bins, range=((0, 256), (0, 256), (0, 256)))
+    h = h.ravel()
+    return (h / h.sum()).astype(np.float32)
+
+
+def hog_features(img: Image.Image, size: int = HOG_SIZE) -> np.ndarray:
+    """Histogramme de gradients orientés (HOG) : décrit la FORME (contours).
+
+    L'image en niveaux de gris est découpée en cellules de 8 x 8 pixels ;
+    dans chaque cellule on calcule l'histogramme des directions des gradients
+    (9 orientations), puis on normalise par blocs de 2 x 2 cellules
+    (robustesse aux variations d'éclairage).
+    """
+    from skimage.feature import hog
+    g = np.asarray(img.convert("L").resize((size, size)), dtype=np.float32) / 255.0
+    return hog(g, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2),
+               block_norm="L2-Hys", feature_vector=True).astype(np.float32)
+
+
+def _classic_one(path: str) -> np.ndarray:
+    img = Image.open(ROOT_DIR / path).convert("RGB")
+    return np.concatenate([color_histogram(img), hog_features(img)])
+
+
+def classic_features(paths, n_jobs: int = 4, cache: str | None = "classic") -> np.ndarray:
+    """Matrice (n images x 1 956) : 192 bins de couleur + 1 764 valeurs HOG, mise en cache."""
+    cache_file = CACHE_DIR / f"{cache}.npz" if cache else None
+    paths = list(paths)
+    if cache_file and cache_file.exists():
+        z = np.load(cache_file, allow_pickle=True)
+        if list(z["paths"]) == paths:
+            return z["X"]
+    with ProcessPoolExecutor(max_workers=n_jobs) as ex:
+        X = np.stack(list(ex.map(_classic_one, paths, chunksize=64)))
+    if cache_file:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(cache_file, X=X, paths=np.array(paths, dtype=object))
+    return X
+
+
+# ==========================================================================
+# 8. Métriques (communes à tous les modèles d'images)
+# ==========================================================================
+def decide_types(P: np.ndarray, thresholds=0.5, max_types: int = 2) -> np.ndarray:
+    """Probabilités (n x K) -> décision 0/1 : p >= seuil, au moins 1 type, au plus 2."""
+    P = np.asarray(P)
+    D = (P >= np.broadcast_to(thresholds, P.shape[1:])).astype(int)
+    top = np.argsort(-P, axis=1)
+    D[np.arange(len(P)), top[:, 0]] = 1                         # au moins le plus probable
+    for i in np.nonzero(D.sum(1) > max_types)[0]:                # au plus max_types
+        D[i] = 0
+        D[i, top[i, :max_types]] = 1
+    return D
+
+
+def multilabel_scores(Y: np.ndarray, D: np.ndarray) -> dict:
+    """Y, D : matrices 0/1 (n x K), vérité et décision."""
+    from sklearn.metrics import f1_score, hamming_loss
+    exact = (Y == D).all(axis=1)
+    return {"F1 micro": f1_score(Y, D, average="micro", zero_division=0),
+            "F1 macro": f1_score(Y, D, average="macro", zero_division=0),
+            "Hamming loss": hamming_loss(Y, D),
+            "exact match": exact.mean(),
+            "≥ 1 type correct": ((Y * D).sum(1) > 0).mean()}
+
+
+def species_to_types(P_species: np.ndarray, species: np.ndarray, type_table: pd.DataFrame,
+                     types: list[str] = TYPES_IMAGES) -> np.ndarray:
+    """Approche B -> probabilités de types : P(type k) = somme des P(espèce s) pour s ayant k."""
+    M = multilabel_matrix(type_table.set_index("pokedex_number").loc[species].reset_index(), types)
+    return P_species @ M          # (n x S) @ (S x K)
+
+
+def species_scores(y: np.ndarray, P: np.ndarray, classes: np.ndarray) -> dict:
+    from sklearn.metrics import f1_score
+    order = np.argsort(-P, axis=1)
+    pred = classes[order[:, 0]]
+    top5 = (classes[order[:, :5]] == np.asarray(y)[:, None]).any(axis=1)
+    return {"top-1": (pred == y).mean(), "top-5": top5.mean(),
+            "F1 macro (espèces)": f1_score(y, pred, average="macro", zero_division=0)}
+
+
+def coverage(correct: np.ndarray, species: np.ndarray) -> tuple[pd.Series, dict]:
+    """Couverture : réussite calculée POUR CHAQUE POKÉMON, puis part des Pokémon
+    dont la réussite dépasse 50 / 70 / 90 %."""
+    acc = pd.Series(np.asarray(correct, dtype=float)).groupby(np.asarray(species)).mean()
+    return acc, {f"% Pokémon > {s} %": (acc > s / 100).mean() for s in (50, 70, 90)}
