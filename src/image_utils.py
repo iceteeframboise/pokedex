@@ -333,3 +333,52 @@ def prepare_dataset(n_jobs: int = 4) -> pd.DataFrame:
 if __name__ == "__main__":
     out = prepare_dataset()
     print(out["motif"].replace("", "gardée").value_counts())
+
+
+# ==========================================================================
+# 6. Étiquettes et découpages (niveau 2)
+# ==========================================================================
+SPLITS_PATH = ROOT_DIR / "data" / "images_splits.csv"
+# Types présents dans les images de 1re génération (Ténèbres n'existe pas en Gen 1)
+TYPES_IMAGES = ["bug", "dragon", "electric", "fairy", "fighting", "fire", "flying", "ghost", "grass",
+                "ground", "ice", "normal", "poison", "psychic", "rock", "steel", "water"]
+
+
+def multilabel_matrix(df: pd.DataFrame, types: list[str] = TYPES_IMAGES) -> np.ndarray:
+    """Matrice Y (n images x K types) : Y[i, k] = 1 si l'image i a le type k (type1 OU type2)."""
+    Y = np.zeros((len(df), len(types)), dtype=np.float32)
+    pos = {t: k for k, t in enumerate(types)}
+    for i, (t1, t2) in enumerate(zip(df["type1"], df["type2"])):
+        Y[i, pos[t1]] = 1
+        if t2 in pos:
+            Y[i, pos[t2]] = 1
+    return Y
+
+
+def make_splits(images: pd.DataFrame, seed: int = 42, n_folds: int = 5) -> pd.DataFrame:
+    """Deux protocoles d'évaluation, figés une fois pour toutes :
+
+    1. `split` : train / val / test = 70 / 15 / 15 %, STRATIFIÉ PAR POKÉMON
+       (chaque espèce a ~70 % de ses images en train, ~15 % en val, ~15 % en test).
+       Toutes les espèces sont vues à l'entraînement : protocole des approches A et B.
+    2. `fold` : 5 plis StratifiedGroupKFold, GROUPÉS PAR ESPÈCE (toutes les images
+       d'un Pokémon sont dans le même pli) et stratifiés sur type1. Évaluer sur
+       le pli k un modèle entraîné sur les 4 autres = prédire les types de
+       Pokémon JAMAIS VUS. Seule l'approche A (types) a un sens ici.
+    """
+    from sklearn.model_selection import StratifiedGroupKFold, train_test_split
+    df = images[["path", "clean_path", "pokedex_number", "name", "type1", "type2"]].copy().reset_index(drop=True)
+    y = df["pokedex_number"]
+    i_train, i_tmp = train_test_split(df.index, test_size=0.30, stratify=y, random_state=seed)
+    i_val, i_test = train_test_split(i_tmp, test_size=0.50, stratify=y[i_tmp], random_state=seed)
+    df["split"] = ""
+    df.loc[i_train, "split"], df.loc[i_val, "split"], df.loc[i_test, "split"] = "train", "val", "test"
+    sgkf = StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    df["fold"] = -1
+    for k, (_, te) in enumerate(sgkf.split(df, df["type1"], groups=df["pokedex_number"])):
+        df.loc[te, "fold"] = k
+    return df
+
+
+def load_splits() -> pd.DataFrame:
+    return pd.read_csv(SPLITS_PATH, keep_default_na=False)
