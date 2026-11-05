@@ -248,7 +248,148 @@ if __name__ == "__main__":
     ap.add_argument("--model", default="cnn_scratch", choices=list(MODELS))
     ap.add_argument("--approach", default="B", choices=["A", "B"])
     ap.add_argument("--epochs", type=int)
+    ap.add_argument("--finetune", help="nom du réseau pré-entraîné à affiner (ex. mobilenetv3_large)")
+    ap.add_argument("--n-trainable", type=int, default=40)
     a = ap.parse_args()
+    if a.finetune:
+        info = finetune(a.finetune, a.approach, n_trainable=a.n_trainable, **({"epochs": a.epochs} if a.epochs else {}))
+        print(f"{a.finetune} fine-tuning {a.approach} : meilleure époque {info['best_epoch']}/{info['epochs_run']}, "
+              f"{info['train_time_s'] / 60:.1f} min")
+        raise SystemExit
     info = train(a.model, a.approach, **({"epochs": a.epochs} if a.epochs else {}))
     print(f"{a.model} {a.approach} : meilleure époque {info['best_epoch']}/{info['epochs_run']}, "
           f"{info['train_time_s'] / 60:.1f} min, {info['params']} paramètres")
+
+
+# ==========================================================================
+# 6. Transfer learning (réseaux pré-entraînés sur ImageNet)
+# ==========================================================================
+def _resnet_preprocess(x):
+    return keras.applications.resnet50.preprocess_input(x)
+
+
+# Chaque réseau attend des pixels 0-255 : MobileNetV3 et EfficientNet intègrent
+# leur propre normalisation ; ResNet50 a besoin de preprocess_input (BGR, moyenne ImageNet).
+BACKBONES = {
+    "mobilenetv3_small": (lambda: keras.applications.MobileNetV3Small(include_top=False, weights="imagenet",
+                                                                     input_shape=(224, 224, 3), pooling="avg"), None),
+    "mobilenetv3_large": (lambda: keras.applications.MobileNetV3Large(include_top=False, weights="imagenet",
+                                                                     input_shape=(224, 224, 3), pooling="avg"), None),
+    "efficientnet_b0": (lambda: keras.applications.EfficientNetB0(include_top=False, weights="imagenet",
+                                                                 input_shape=(224, 224, 3), pooling="avg"), None),
+    "resnet50": (lambda: keras.applications.ResNet50(include_top=False, weights="imagenet",
+                                                     input_shape=(224, 224, 3), pooling="avg"), _resnet_preprocess),
+}
+
+
+def build_backbone(name: str) -> keras.Model:
+    """Réseau pré-entraîné SANS sa couche de classification ImageNet, suivi
+    d'un GlobalAveragePooling : image 224 x 224 -> vecteur de caractéristiques."""
+    make, prep = BACKBONES[name]
+    base = make()
+    inp = keras.Input((224, 224, 3))
+    x = keras.layers.Lambda(prep, name="preprocess")(inp) if prep else inp
+    return keras.Model(inp, base(x), name=f"{name}_features")
+
+
+def extract_embeddings(name: str, batch: int = 64) -> np.ndarray:
+    """Caractéristiques du réseau GELÉ pour les 14 715 images (calculées une fois, mises en cache)."""
+    f = CACHE_DIR / f"emb_{name}.npy"
+    if f.exists():
+        return np.load(f)
+    X = load_arrays(224)
+    model = build_backbone(name)
+    t0 = time.time()
+    E = model.predict(tf.data.Dataset.from_tensor_slices(X).batch(batch).map(lambda a: tf.cast(a, tf.float32)),
+                      verbose=0)
+    (CACHE_DIR / f"emb_{name}.time").write_text(f"{(time.time() - t0) / len(X) * 1000:.2f}")
+    np.save(f, E.astype(np.float32))
+    return E
+
+
+def build_head(dim: int, n_out: int, approach: str, dropout: float = 0.3) -> keras.Model:
+    """Tête de classification posée sur les caractéristiques : Dropout + Dense."""
+    inp = keras.Input((dim,))
+    x = keras.layers.Dropout(dropout)(inp)
+    out = keras.layers.Dense(n_out, activation="sigmoid" if approach == "A" else "softmax", name="sortie")(x)
+    return keras.Model(inp, out, name=f"tete_{approach}")
+
+
+def compile_for(model, approach, y_train, lr):
+    if approach == "A":
+        pos = y_train.mean(0)
+        loss = WeightedBCE(np.sqrt((1 - pos) / np.clip(pos, 1e-6, None)))
+        metrics = [keras.metrics.BinaryAccuracy(name="acc")]
+    else:
+        loss = keras.losses.SparseCategoricalCrossentropy()
+        metrics = [keras.metrics.SparseCategoricalAccuracy(name="acc"),
+                   keras.metrics.SparseTopKCategoricalAccuracy(k=5, name="top5")]
+    model.compile(optimizer=keras.optimizers.AdamW(lr, weight_decay=1e-4), loss=loss, metrics=metrics)
+
+
+def train_head(E: np.ndarray, y: np.ndarray, approach: str, tr: np.ndarray, va: np.ndarray,
+               epochs: int = 200, lr: float = 1e-3, verbose: int = 0):
+    """Entraîne la tête sur des caractéristiques gelées (quelques secondes sur CPU)."""
+    keras.utils.set_random_seed(RANDOM_STATE)
+    head = build_head(E.shape[1], y.shape[1] if approach == "A" else int(y.max()) + 1, approach)
+    compile_for(head, approach, y[tr], lr)
+    cw = class_weights_species(y[tr]) if approach == "B" else None
+    hist = head.fit(E[tr], y[tr], validation_data=(E[va], y[va]), epochs=epochs, batch_size=128,
+                    class_weight=cw, verbose=verbose,
+                    callbacks=[keras.callbacks.EarlyStopping("val_loss", patience=10, restore_best_weights=True)])
+    return head, hist
+
+
+def finetune(backbone: str, approach: str, n_trainable: int = 40, epochs: int = 12, lr: float = 1e-4,
+             batch: int = 32, verbose: int = 2) -> dict:
+    """Fine-tuning : on part d'une tête déjà entraînée sur les caractéristiques
+    gelées, puis on DÉGÈLE les `n_trainable` dernières couches du réseau et on
+    réentraîne l'ensemble avec un petit pas d'apprentissage (1e-4) et la data
+    augmentation. Les BatchNorm restent gelées (statistiques d'ImageNet), sinon
+    de petits batchs les dérègleraient.
+    """
+    keras.utils.set_random_seed(RANDOM_STATE)
+    splits = load_splits()
+    y, classes = targets(splits, approach)
+    tr = (splits["split"] == "train").to_numpy()
+    va = (splits["split"] == "val").to_numpy()
+    E = extract_embeddings(backbone)
+    head, _ = train_head(E, y, approach, tr, va)                         # 1) tête sur réseau gelé
+
+    feat = build_backbone(backbone)
+    base = [l for l in feat.layers if isinstance(l, keras.Model)][0]
+    base.trainable = True
+    for layer in base.layers[:-n_trainable]:
+        layer.trainable = False
+    for layer in base.layers:
+        if isinstance(layer, keras.layers.BatchNormalization):
+            layer.trainable = False
+    inp = keras.Input((224, 224, 3))
+    model = keras.Model(inp, head(feat(inp, training=False)), name=f"{backbone}_{approach}")
+    compile_for(model, approach, y[tr], lr)
+
+    X = load_arrays(224)
+    name = f"{backbone}_ft_{approach}"
+    callbacks = [keras.callbacks.EarlyStopping("val_loss", patience=3, restore_best_weights=True),
+                 keras.callbacks.ReduceLROnPlateau("val_loss", factor=0.5, patience=2, min_lr=1e-6),
+                 keras.callbacks.BackupAndRestore(str(CACHE_DIR / "backup" / name), delete_checkpoint=True)]
+    t0 = time.time()
+    hist = model.fit(make_dataset(X[tr], y[tr], batch, True), validation_data=make_dataset(X[va], y[va], 64, False),
+                     epochs=epochs, class_weight=class_weights_species(y[tr]) if approach == "B" else None,
+                     callbacks=callbacks, verbose=verbose)
+    train_time = time.time() - t0
+    t0 = time.time()
+    P_val = model.predict(make_dataset(X[va], y[va], 64, False), verbose=0)
+    infer_ms = (time.time() - t0) / va.sum() * 1000
+    for d in (CANDIDATES, HISTORIES, PREDS):
+        d.mkdir(parents=True, exist_ok=True)
+    model.save(CANDIDATES / f"{name}.keras")
+    np.save(PREDS / f"{name}_val.npy", P_val)
+    info = {"model": backbone, "approach": approach, "n_trainable": n_trainable, "lr": lr,
+            "history": {k: [float(v) for v in vals] for k, vals in hist.history.items()},
+            "best_epoch": int(np.argmin(hist.history["val_loss"])) + 1, "epochs_run": len(hist.history["loss"]),
+            "train_time_s": train_time, "infer_ms_per_image": infer_ms, "params": int(model.count_params()),
+            "trainable_params": int(sum(np.prod(w.shape) for w in model.trainable_weights)),
+            "size_mb": (CANDIDATES / f"{name}.keras").stat().st_size / 1e6, "classes": classes.tolist()}
+    (HISTORIES / f"{name}.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
+    return info
