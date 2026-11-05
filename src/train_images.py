@@ -243,24 +243,6 @@ def train(model_key: str, approach: str, verbose: int = 2, **overrides) -> dict:
     return info
 
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="cnn_scratch", choices=list(MODELS))
-    ap.add_argument("--approach", default="B", choices=["A", "B"])
-    ap.add_argument("--epochs", type=int)
-    ap.add_argument("--finetune", help="nom du réseau pré-entraîné à affiner (ex. mobilenetv3_large)")
-    ap.add_argument("--n-trainable", type=int, default=40)
-    a = ap.parse_args()
-    if a.finetune:
-        info = finetune(a.finetune, a.approach, n_trainable=a.n_trainable, **({"epochs": a.epochs} if a.epochs else {}))
-        print(f"{a.finetune} fine-tuning {a.approach} : meilleure époque {info['best_epoch']}/{info['epochs_run']}, "
-              f"{info['train_time_s'] / 60:.1f} min")
-        raise SystemExit
-    info = train(a.model, a.approach, **({"epochs": a.epochs} if a.epochs else {}))
-    print(f"{a.model} {a.approach} : meilleure époque {info['best_epoch']}/{info['epochs_run']}, "
-          f"{info['train_time_s'] / 60:.1f} min, {info['params']} paramètres")
-
-
 # ==========================================================================
 # 6. Transfer learning (réseaux pré-entraînés sur ImageNet)
 # ==========================================================================
@@ -393,3 +375,21 @@ def finetune(backbone: str, approach: str, n_trainable: int = 40, epochs: int = 
             "size_mb": (CANDIDATES / f"{name}.keras").stat().st_size / 1e6, "classes": classes.tolist()}
     (HISTORIES / f"{name}.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
     return info
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="cnn_scratch", choices=list(MODELS))
+    ap.add_argument("--approach", default="B", choices=["A", "B"])
+    ap.add_argument("--epochs", type=int)
+    ap.add_argument("--finetune", help="nom du réseau pré-entraîné à affiner (ex. mobilenetv3_large)")
+    ap.add_argument("--n-trainable", type=int, default=40)
+    a = ap.parse_args()
+    if a.finetune:
+        info = finetune(a.finetune, a.approach, n_trainable=a.n_trainable, **({"epochs": a.epochs} if a.epochs else {}))
+        print(f"{a.finetune} fine-tuning {a.approach} : meilleure époque {info['best_epoch']}/{info['epochs_run']}, "
+              f"{info['train_time_s'] / 60:.1f} min")
+        raise SystemExit
+    info = train(a.model, a.approach, **({"epochs": a.epochs} if a.epochs else {}))
+    print(f"{a.model} {a.approach} : meilleure époque {info['best_epoch']}/{info['epochs_run']}, "
+          f"{info['train_time_s'] / 60:.1f} min, {info['params']} paramètres")
