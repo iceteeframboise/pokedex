@@ -8,3 +8,4 @@ __pycache__/
 data/images/
 data/images_clean/
 data/cache/
+models/candidates/
