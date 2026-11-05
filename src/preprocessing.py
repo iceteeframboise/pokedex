@@ -30,6 +30,12 @@ from src.config import (
 
 NO_TYPE2 = "aucun"   # valeur de remplacement pour les Pokémon à un seul type
 
+# Pokémon de 1re génération à UN seul type dans leur forme classique, mais dont
+# le CSV donne un 2e type issu de leur forme d'Alola (vérifié sur le Pokédex officiel).
+KANTO_SINGLE_TYPE = {"Rattata", "Raticate", "Raichu", "Sandshrew", "Sandslash", "Vulpix",
+                     "Ninetales", "Diglett", "Dugtrio", "Meowth", "Persian", "Grimer", "Muk",
+                     "Marowak"}
+
 
 # ==========================================================================
 # 1. Chargement et nettoyage
@@ -67,6 +73,8 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     - capture_rate converti en numérique ;
     - type2 manquant -> « aucun » : l'absence de second type est une
       information réelle, pas une donnée perdue, on ne l'impute donc pas ;
+    - type2 corrigé pour 16 Pokémon dont le CSV donne le type d'une forme
+      alternative (14 formes d'Alola de 1re génération, Shaymin, Darmanitan) ;
     - is_legendary et generation en entiers ;
     - height_m / weight_kg : on NE remplit PAS les valeurs manquantes ici.
       L'imputation par la médiane est faite dans le Pipeline, avec la médiane
@@ -78,6 +86,12 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
         df["capture_rate"] = df["capture_rate"].map(_parse_capture_rate)
     df["type1"] = df["type1"].astype(str).str.strip().str.lower()
     df["type2"] = df["type2"].fillna(NO_TYPE2).astype(str).str.strip().str.lower()
+    # Erreur du CSV : pour les Pokémon de 1re génération qui ont une forme
+    # d'Alola, type2 contient un type de la forme d'Alola (Rattata « normal /
+    # dark ») ou répète type1 (Raichu « electric / electric »). On rétablit le
+    # type officiel de la forme classique (celle des images du niveau 2).
+    fix = df["name"].isin(KANTO_SINGLE_TYPE) | (df["type2"] == df["type1"])
+    df.loc[fix, "type2"] = NO_TYPE2
     df[TARGET_LEGENDARY] = df[TARGET_LEGENDARY].astype(int)
     df["generation"] = df["generation"].astype(int)
     for col in STATS + PHYSICAL:
