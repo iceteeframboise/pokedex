@@ -1,0 +1,16 @@
+Pokémon,réussite espèce,types exacts,images test,images train,souvent pris pour,mêmes types ?,explication
+Pidgeotto,0.6,1.0,15,73,Pidgeot (5×),oui,confondu avec sa lignée d'évolution
+Slowbro,0.6,0.6,10,50,Tentacool (1×),non,confondu avec un Pokémon de même type ; peu d'images d'entraînement (50)
+Abra,0.625,0.75,8,40,Machamp (1×),non,peu d'images d'entraînement (40)
+Hitmonchan,0.7142857142857143,0.7142857142857143,14,69,Dugtrio (2×),non,styles d'images variés / autre
+Golduck,0.7222222222222222,0.8333333333333334,18,83,Vaporeon (1×),oui,confondu avec un Pokémon de même type
+Kadabra,0.75,0.9166666666666666,12,57,Alakazam (2×),oui,confondu avec sa lignée d'évolution ; peu d'images d'entraînement (57)
+Poliwrath,0.75,0.75,12,59,Poliwhirl (3×),non,confondu avec sa lignée d'évolution ; peu d'images d'entraînement (59)
+Pidgeot,0.75,0.875,16,75,Fearow (1×),oui,confondu avec un Pokémon de même type
+Dratini,0.75,0.75,16,73,Snorlax (1×),non,styles d'images variés / autre
+Rattata,0.7692307692307693,0.7692307692307693,13,64,Grimer (1×),non,styles d'images variés / autre
+Kabutops,0.7692307692307693,0.7692307692307693,13,62,Zapdos (1×),non,styles d'images variés / autre
+Slowpoke,0.7692307692307693,0.7692307692307693,13,63,Lickitung (1×),non,styles d'images variés / autre
+Golbat,0.7777777777777778,0.8333333333333334,18,82,Aerodactyl (2×),non,styles d'images variés / autre
+Nidoqueen,0.7857142857142857,0.7857142857142857,14,67,Rhydon (2×),non,styles d'images variés / autre
+Koffing,0.7857142857142857,0.7857142857142857,14,68,Cloyster (1×),non,styles d'images variés / autre

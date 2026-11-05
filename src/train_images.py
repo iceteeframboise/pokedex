@@ -377,6 +377,38 @@ def finetune(backbone: str, approach: str, n_trainable: int = 40, epochs: int = 
     return info
 
 
+# ==========================================================================
+# 7. Grad-CAM : où le réseau regarde-t-il ?
+# ==========================================================================
+def grad_cam(model: keras.Model, images: np.ndarray, class_idx=None, layer: str = "top_activation") -> np.ndarray:
+    """Cartes Grad-CAM (Selvaraju et al., 2017) pour un modèle [réseau pré-entraîné -> tête].
+
+    1. On récupère les cartes d'activation A^k de la dernière couche convolutive
+       (7 x 7 x 1 280 pour EfficientNetB0) et le score y^c de la classe c.
+    2. Poids de chaque carte : alpha_k = moyenne spatiale de dy^c / dA^k
+       (« à quel point la carte k fait monter le score de c »).
+    3. Carte de chaleur : ReLU(sum_k alpha_k A^k), normalisée dans [0, 1] puis
+       agrandie à la taille de l'image. Les zones chaudes sont celles qui ont
+       le plus contribué à la décision.
+    """
+    feat, head = model.layers[1], model.layers[2]
+    base = [l for l in feat.layers if isinstance(l, keras.Model)][0]
+    conv_model = keras.Model(base.inputs, [base.get_layer(layer).output, base.output])
+    x = tf.cast(images, tf.float32)
+    with tf.GradientTape() as tape:
+        conv, f = conv_model(x, training=False)
+        tape.watch(conv)
+        preds = head(f, training=False)
+        idx = tf.argmax(preds, axis=1) if class_idx is None else tf.constant(np.asarray(class_idx), tf.int64)
+        score = tf.gather(preds, idx, axis=1, batch_dims=1)
+    grads = tape.gradient(score, conv)
+    alpha = tf.reduce_mean(grads, axis=(1, 2), keepdims=True)
+    cam = tf.nn.relu(tf.reduce_sum(alpha * conv, axis=-1))
+    cam = cam / (tf.reduce_max(cam, axis=(1, 2), keepdims=True) + 1e-8)
+    cam = tf.image.resize(cam[..., None], images.shape[1:3], method="bilinear")[..., 0]
+    return cam.numpy()
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="cnn_scratch", choices=list(MODELS))
