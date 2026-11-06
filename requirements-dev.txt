@@ -1,0 +1,4 @@
+# Appli + notebooks + tests
+-r requirements.txt
+jupyter
+pytest==9.2.0

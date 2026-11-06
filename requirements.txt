@@ -1,4 +1,5 @@
-# Versions figées pour la reproductibilité (Python 3.11+)
+# Versions figées pour la reproductibilité. Python 3.12 ou 3.13 (TensorFlow 2.21 n'existe pas pour 3.14).
+# Ce fichier suffit pour l'appli (y compris en ligne) ; notebooks et tests : pip install -r requirements-dev.txt
 numpy==2.5.3
 pandas==3.0.5
 scipy==1.18.1
@@ -9,8 +10,6 @@ seaborn==0.13.2
 plotly==7.1.0
 streamlit==1.66.1
 joblib==1.6.0
-jupyter
-pytest==9.2.0
 # --- Niveau 2 : images ---
 tensorflow==2.21.0
 keras==3.15.1
