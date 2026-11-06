@@ -59,7 +59,10 @@ type(s) prédit(s), second avis du modèle de types et fiche complète.
 Onglet **Caméra** (niveau 3) : photo par la webcam (le navigateur demande l'autorisation), recadrage
 centré → Pokémon identifié si la confiance dépasse 70 % (sinon « Pokémon non reconnu ») et **fiche
 complète** : nom japonais, image de référence, types, taille, poids, talents, stats (radar), groupe,
-faiblesses, résistances et immunités. L'onglet Pokédex (catalogue) est réservé au niveau 3.
+faiblesses, résistances et immunités. Onglet **Pokédex** (niveau 3) : catalogue des 801 Pokémon (vignettes, stats, groupe), recherche par nom,
+filtres (type 1 ou 2, génération, légendaire, groupe), tri par n'importe quelle stat, clic sur une ligne →
+fiche complète ; vue **« Organisation par types »** : nombre de Pokémon par type, heatmap des stats
+moyennes par type et liste des Pokémon d'un type.
 
 ## Niveau 2 : images
 

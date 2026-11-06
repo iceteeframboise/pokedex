@@ -10,7 +10,7 @@ Onglets :
     Statistiques  (niveau 1) : 6 stats -> groupe, probabilité d'être légendaire, top-3 des types
     Image         (niveau 2) : image importée -> Pokémon reconnu (top-3) et types prédits
     Caméra        (niveau 3) : photo par la webcam -> Pokémon identifié (ou « non reconnu ») et fiche complète
-    Pokédex       (niveau 3) : à venir
+    Pokédex       (niveau 3) : catalogue des 801 Pokémon (filtres, tri, recherche, fiche) et vue par types
 """
 from __future__ import annotations
 
@@ -391,9 +391,146 @@ def tab_camera(models, df: pd.DataFrame):
     afficher_fiche(top[0]["pokedex_number"], models, df, "camera")
 
 
-def tab_a_venir(niveau: str, texte: str):
-    st.subheader(f"{niveau} : à venir")
-    st.info(texte)
+# --------------------------------------------------------------------------
+# Onglet 4 : Pokédex (catalogue)
+# --------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def catalogue(_models, df: pd.DataFrame) -> pd.DataFrame:
+    """Table du catalogue : une ligne par Pokémon, avec groupe (niveau 1) et vignette."""
+    import base64
+    from src.pokedex_data import reference_image
+    z = _models.scaler.transform(df[STATS])
+    groupes = [_models.clusters[str(c)]["name"] for c in _models.kmeans.predict(z)]
+
+    def vignette(n):
+        f = reference_image(n)
+        if f is None:                     # pas d'image hors 1re génération : vignette transparente
+            return ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+                    "YAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
+        from PIL import Image
+        import io
+        b = io.BytesIO()
+        Image.open(f).resize((56, 56)).save(b, "JPEG", quality=80)
+        return "data:image/jpeg;base64," + base64.b64encode(b.getvalue()).decode()
+
+    cat = pd.DataFrame({
+        "image": [vignette(n) for n in df["pokedex_number"]],
+        "n°": df["pokedex_number"].astype(int), "nom": df["name"],
+        "types": [nom_types([a, b]) for a, b in zip(df["type1"], df["type2"])],
+        "type1": df["type1"], "type2": df["type2"],
+        "total": df["base_total"].astype(int), **{STAT_LABELS[s_]: df[s_].astype(int) for s_ in STATS},
+        "taille (m)": df["height_m"], "poids (kg)": df["weight_kg"],
+        "génération": df["generation"].astype(int), "légendaire": df["is_legendary"].astype(bool),
+        "groupe": groupes})
+    return cat
+
+
+def tab_pokedex(models, df: pd.DataFrame):
+    st.subheader("Pokédex : les 801 Pokémon")
+    cat = catalogue(models, df)
+    vue = st.segmented_control("Vue", ["Catalogue", "Organisation par types"], default="Catalogue",
+                               key="vue_pokedex", label_visibility="collapsed")
+    if vue == "Organisation par types":
+        vue_types(cat)
+        return
+
+    # ---- Filtres -------------------------------------------------------------
+    tous_types = sorted(set(cat["type1"]) | (set(cat["type2"]) - {"aucun"}), key=lambda t: TYPE_FR.get(t, t))
+    f1, f2, f3, f4 = st.columns([1.3, 1, 0.9, 1.3])
+    recherche = f1.text_input("Rechercher un nom", placeholder="ex. pika, dra…", key="recherche")
+    types = f2.multiselect("Type (1er ou 2e)", tous_types, format_func=lambda t: TYPE_FR.get(t, t), key="f_types",
+                           placeholder="Tous")
+    gens = f3.multiselect("Génération", list(range(1, 8)), key="f_gen", placeholder="Toutes")
+    groupes = f4.multiselect("Groupe (niveau 1)", sorted(cat["groupe"].unique()), key="f_groupe",
+                             placeholder="Tous")
+    g1, g2, g3, _ = st.columns([1, 1.3, 1, 1.3])
+    leg = g1.radio("Légendaire", ["tous", "oui", "non"], horizontal=True, key="f_leg")
+    cles_tri = ["n°", "nom", "total", *[STAT_LABELS[s_] for s_ in STATS], "taille (m)", "poids (kg)"]
+    tri = g2.selectbox("Trier par", cles_tri, key="tri")
+    ordre = g3.radio("Ordre", ["croissant", "décroissant"], horizontal=True, key="ordre",
+                     index=0 if tri in ("n°", "nom") else 1)
+
+    m = pd.Series(True, index=cat.index)
+    if recherche:
+        m &= cat["nom"].str.contains(recherche.strip(), case=False, regex=False)
+    if types:
+        m &= cat["type1"].isin(types) | cat["type2"].isin(types)
+    if gens:
+        m &= cat["génération"].isin(gens)
+    if groupes:
+        m &= cat["groupe"].isin(groupes)
+    if leg != "tous":
+        m &= cat["légendaire"] == (leg == "oui")
+    res = cat[m].sort_values(tri, ascending=(ordre == "croissant"), na_position="last")
+
+    st.caption(f"**{len(res)}** Pokémon sur {len(cat)}. Cliquez sur une ligne pour afficher sa fiche complète.")
+    if res.empty:
+        st.info("Aucun Pokémon ne correspond à ces filtres.")
+        return
+    colonnes = ["image", "n°", "nom", "types", "total", *[STAT_LABELS[s_] for s_ in STATS], "groupe", "légendaire",
+                "génération"]
+    sel = st.dataframe(
+        res[colonnes], hide_index=True, height=420, key="table_pokedex", on_select="rerun",
+        selection_mode="single-row",
+        column_config={"image": st.column_config.ImageColumn("", width="small"),
+                       "n°": st.column_config.NumberColumn(format="%d", width="small"),
+                       "total": st.column_config.ProgressColumn("total", min_value=150, max_value=780, format="%d"),
+                       "légendaire": st.column_config.CheckboxColumn("lég."),
+                       "génération": st.column_config.NumberColumn("gén.", format="%d", width="small")})
+    lignes = sel.selection.rows if sel is not None else []
+    if lignes:
+        n = int(res.iloc[lignes[0]]["n°"])
+        afficher_fiche(n, models, df, f"pokedex_{n}")
+
+
+def vue_types(cat: pd.DataFrame):
+    """Organisation par types : effectifs, stats moyennes (heatmap), Pokémon de chaque type."""
+    lignes = []
+    for t in sorted(set(cat["type1"]) | (set(cat["type2"]) - {"aucun"})):
+        m = (cat["type1"] == t) | (cat["type2"] == t)
+        lignes.append({"type": TYPE_FR.get(t, t), "code": t, "Pokémon": int(m.sum()),
+                       "en type 1": int((cat["type1"] == t).sum()), "en type 2": int((cat["type2"] == t).sum()),
+                       "légendaires": int(cat.loc[m, "légendaire"].sum()),
+                       **{STAT_LABELS[s_]: cat.loc[m, STAT_LABELS[s_]].mean() for s_ in STATS},
+                       "total moyen": cat.loc[m, "total"].mean()})
+    par_type = pd.DataFrame(lignes).sort_values("Pokémon", ascending=False)
+
+    c1, c2 = st.columns([1, 1.4], gap="large")
+    with c1:
+        st.markdown("**Nombre de Pokémon par type** (un Pokémon à deux types compte pour chacun)")
+        fig = go.Figure()
+        fig.add_bar(y=par_type["type"], x=par_type["en type 1"], name="type 1", orientation="h",
+                    marker_color=COLOR_POKEMON)
+        fig.add_bar(y=par_type["type"], x=par_type["en type 2"], name="type 2", orientation="h",
+                    marker_color="#9ec5f4")
+        fig.update_layout(barmode="stack", height=520, margin=dict(l=10, r=10, t=10, b=30),
+                          yaxis=dict(autorange="reversed"), legend=dict(orientation="h", y=-0.08))
+        st.plotly_chart(fig, config={"displayModeBar": False}, key="types_effectifs")
+    with c2:
+        st.markdown("**Stats moyennes par type** (écart à la moyenne des 801 Pokémon, en écarts-types)")
+        cols = [STAT_LABELS[s_] for s_ in STATS]
+        moy, et = cat[cols].mean(), cat[cols].std()
+        z = (par_type.set_index("type")[cols] - moy) / et
+        brut = par_type.set_index("type")[cols]
+        fig = go.Figure(go.Heatmap(z=z.values, x=cols, y=z.index, zmid=0, zmin=-1.5, zmax=1.5,
+                                   colorscale=[[0, "#104281"], [0.5, "#f0efec"], [1, "#a32b2b"]],
+                                   text=brut.round(0).astype(int).values, texttemplate="%{text}",
+                                   hovertemplate="%{y} · %{x} : %{text} (z = %{z:.2f})<extra></extra>",
+                                   colorbar=dict(title="z")))
+        fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=30), yaxis=dict(autorange="reversed"))
+        st.plotly_chart(fig, config={"displayModeBar": False}, key="types_heatmap")
+        st.caption("Chiffres : moyenne brute de la stat ; couleur : rouge = au-dessus de la moyenne, bleu = en dessous.")
+
+    st.markdown("**Pokémon d'un type**")
+    t = st.selectbox("Type", par_type["code"], format_func=lambda c: TYPE_FR.get(c, c), key="type_detail",
+                     label_visibility="collapsed")
+    sous = cat[(cat["type1"] == t) | (cat["type2"] == t)].sort_values("total", ascending=False)
+    st.caption(f"{len(sous)} Pokémon de type {TYPE_FR.get(t, t)}, du plus fort au plus faible (total des stats).")
+    st.dataframe(sous[["image", "n°", "nom", "types", "total", "groupe", "légendaire"]], hide_index=True, height=320,
+                 column_config={"image": st.column_config.ImageColumn("", width="small"),
+                                "total": st.column_config.ProgressColumn("total", min_value=150, max_value=780,
+                                                                         format="%d"),
+                                "légendaire": st.column_config.CheckboxColumn("lég.")}, key="table_type")
 
 
 # --------------------------------------------------------------------------
@@ -416,7 +553,7 @@ def main():
     with t3:
         tab_camera(models, df)
     with t4:
-        tab_a_venir("Niveau 3", "Catalogue des 801 Pokémon : filtres, tri, recherche, organisation par types.")
+        tab_pokedex(models, df)
 
     meta = models.metadata
     st.caption(f"Modèles entraînés le {meta['date_entrainement'][:10]} sur {meta['n_pokemon']} Pokémon "
