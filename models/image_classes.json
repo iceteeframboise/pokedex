@@ -1015,5 +1015,7 @@
    "type1": "psychic",
    "type2": "aucun"
   }
- ]
+ ],
+ "seuil_confiance": 0.7,
+ "seuil_confiance_justification": "probabilité maximale minimale pour accepter une réponse ; choisie sur la validation (gain net : erreurs évitées - bonnes réponses perdues maximal)"
 }

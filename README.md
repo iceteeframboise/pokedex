@@ -54,7 +54,12 @@ choisir un Pokémon existant pour préremplir les 6 stats, ou les saisir libreme
 - un **radar** des stats comparé au profil moyen du groupe, et les Pokémon existants les plus proches.
 
 Onglet **Image** (niveau 2) : importer une image d'un Pokémon de 1re génération → Pokémon reconnu (top-3),
-type(s) prédit(s), second avis du modèle de types et fiche rapide. Les onglets Caméra et Pokédex sont réservés au niveau 3.
+type(s) prédit(s), second avis du modèle de types et fiche complète.
+
+Onglet **Caméra** (niveau 3) : photo par la webcam (le navigateur demande l'autorisation), recadrage
+centré → Pokémon identifié si la confiance dépasse 70 % (sinon « Pokémon non reconnu ») et **fiche
+complète** : nom japonais, image de référence, types, taille, poids, talents, stats (radar), groupe,
+faiblesses, résistances et immunités. L'onglet Pokédex (catalogue) est réservé au niveau 3.
 
 ## Niveau 2 : images
 
@@ -97,6 +102,7 @@ src/train_tabular.py      entraîne et sauvegarde les modèles du niveau 1
 src/image_utils.py        images : association au CSV, nettoyage, doublons, découpages, métriques
 src/train_images.py       réseaux de neurones : augmentation, CNN, transfer learning, Grad-CAM
 models/                   modèles sauvegardés (.joblib, .pt)
+assets/reference/         une image de référence par Pokémon de 1re génération (fiche de l'appli)
 reports/figures/          figures exportées pour le rapport
 reports/tables/           tableaux récapitulatifs (CSV) pour le rapport
 app.py                    application Pokédex Streamlit

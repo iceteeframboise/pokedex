@@ -9,7 +9,7 @@ L'appli charge les modèles sauvegardés dans models/ (produits par
 Onglets :
     Statistiques  (niveau 1) : 6 stats -> groupe, probabilité d'être légendaire, top-3 des types
     Image         (niveau 2) : image importée -> Pokémon reconnu (top-3) et types prédits
-    Caméra        (niveau 3) : à venir
+    Caméra        (niveau 3) : photo par la webcam -> Pokémon identifié (ou « non reconnu ») et fiche complète
     Pokédex       (niveau 3) : à venir
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ import streamlit as st
 from src.config import STAT_LABELS, STATS, TYPE_FR
 from src.pokedex_data import (IMAGE_CLASSES, IMAGE_MODEL, STAT_MAX, STAT_MIN, load_image_models,
                               load_pokemon, load_tabular_models, missing_model_files, nearest_pokemon,
-                              predict_image, predict_stats)
+                              pokemon_card, predict_image, predict_stats)
 
 st.set_page_config(page_title="Mon Pokédex", page_icon="🔴", layout="wide")
 
@@ -268,22 +268,62 @@ def afficher_resultat_image(res: dict, models, df: pd.DataFrame, cle: str):
                         + ("✅ concordant" if accord else "⚠️ différent"))
             st.caption(" · ".join(f"{TYPE_FR[t]} {v:.0%}" for t, v in pa))
 
-    # Fiche rapide du Pokémon reconnu, avec les modèles du niveau 1
-    row = df[df["pokedex_number"] == top[0]["pokedex_number"]].iloc[0]
-    stats = {s: int(row[s]) for s in STATS}
-    r = predict_stats(models, stats)
+    afficher_fiche(top[0]["pokedex_number"], models, df, cle)
+
+
+# --------------------------------------------------------------------------
+# Fiche complète d'un Pokémon (onglets Image, Caméra et Pokédex)
+# --------------------------------------------------------------------------
+def puces(items: dict | list, fond: str) -> str:
+    """Petites étiquettes HTML : {type: multiplicateur} ou [type]."""
+    if not items:
+        return "<span style='color:#898781'>aucune</span>"
+    if isinstance(items, dict):
+        items = [f"{TYPE_FR.get(t, t)} ×{m:g}" for t, m in items.items()]
+    else:
+        items = [TYPE_FR.get(t, t) for t in items]
+    return " ".join(f"<span style='background:{fond};border-radius:10px;padding:2px 9px;margin:2px;"
+                    f"display:inline-block;font-size:0.85rem'>{html.escape(x)}</span>" for x in items)
+
+
+def afficher_fiche(pokedex_number: int, models, df: pd.DataFrame, cle: str):
+    c = pokemon_card(df, pokedex_number)
+    r = predict_stats(models, c["stats"])
     with st.container(border=True):
-        st.markdown(f"**Fiche rapide : {html.escape(row['name'])}**")
-        f1, f2 = st.columns([2, 3])
-        with f1:
-            st.markdown(f"- Groupe (niveau 1) : **{r['cluster']['name']}**\n"
-                        f"- Total des stats : **{int(row['base_total'])}**\n"
-                        f"- Légendaire : **{'oui' if row['is_legendary'] else 'non'}** "
-                        f"(probabilité prédite par les stats : {r['p_legendary']:.0%})\n"
-                        f"- Génération : {int(row['generation'])}")
-        with f2:
-            st.plotly_chart(radar(stats, r["cluster"], df[STATS].mean(), row["name"]),
+        st.markdown(f"### #{c['pokedex_number']:03d} {html.escape(c['name'])}")
+        st.caption(f"Nom japonais : {c['japanese_kana']} ({c['japanese_romaji']}) · {c['classification']}")
+        g1, g2, g3 = st.columns([1, 1.3, 1.7], gap="medium")
+        with g1:
+            if c["reference_image"]:
+                st.image(str(c["reference_image"]), width=180, caption="Image de référence (dataset)")
+            st.markdown(f"<div style='font-size:1.15rem;font-weight:700'>{html.escape(nom_types(c['types']))}</div>",
+                        unsafe_allow_html=True)
+            if c["is_legendary"]:
+                st.markdown(f"<span style='color:{COLOR_LEG};font-weight:600'>⭐ Pokémon légendaire</span>",
+                            unsafe_allow_html=True)
+        with g2:
+            sexe = ("asexué" if c["percentage_male"] is None
+                    else f"{c['percentage_male']:g} % mâles / {100 - c['percentage_male']:g} % femelles")
+            lignes = [("Taille", f"{c['height_m']:g} m" if c["height_m"] is not None else "non renseignée"),
+                      ("Poids", f"{c['weight_kg']:g} kg" if c["weight_kg"] is not None else "non renseigné"),
+                      ("Talents", ", ".join(c["abilities"])),
+                      ("Génération", str(c["generation"])),
+                      ("Sexe", sexe),
+                      ("Taux de capture", f"{c['capture_rate']} / 255" if c["capture_rate"] is not None else "-"),
+                      ("Pas pour éclore", f"{c['base_egg_steps']:,}".replace(",", " ")),
+                      ("Bonheur de base", str(c["base_happiness"])),
+                      ("Expérience au niveau 100", f"{c['experience_growth']:,}".replace(",", " ")),
+                      ("Total des stats", str(c["base_total"]))]
+            st.markdown("\n".join(f"- **{k}** : {html.escape(v)}" for k, v in lignes))
+            st.markdown(f"**Groupe (niveau 1)** : {r['cluster']['name']}  \n"
+                        f"**P(légendaire) prédite par les stats** : {r['p_legendary']:.0%}")
+        with g3:
+            st.plotly_chart(radar(c["stats"], r["cluster"], df[STATS].mean(), c["name"]),
                             config={"displayModeBar": False}, key=f"radar_{cle}")
+        st.markdown("**Faiblesses** (dégâts reçus) : " + puces(c["weaknesses"], "#f6d5d5"), unsafe_allow_html=True)
+        st.markdown("**Résistances** : " + puces(c["resistances"], "#d5ecd8"), unsafe_allow_html=True)
+        st.markdown("**Immunités** : " + puces(c["immunities"], "#e1e0d9"), unsafe_allow_html=True)
+        st.caption("Talents : le jeu de données mélange ceux de la forme classique et de ses formes régionales.")
 
 
 def tab_image(models, df: pd.DataFrame):
@@ -310,6 +350,47 @@ def tab_image(models, df: pd.DataFrame):
     afficher_resultat_image(res, models, df, "image")
 
 
+# --------------------------------------------------------------------------
+# Onglet 3 : caméra
+# --------------------------------------------------------------------------
+def seuil_confiance() -> float:
+    import json
+    return float(json.loads(IMAGE_CLASSES.read_text(encoding="utf-8")).get("seuil_confiance", 0.7))
+
+
+def tab_camera(models, df: pd.DataFrame):
+    st.subheader("Identifier un Pokémon avec la caméra")
+    st.caption("Présentez une image de Pokémon (écran de téléphone, carte, impression…) bien au centre et assez "
+               "grande dans le cadre, puis prenez la photo. L'image est recadrée au centre (carré) et préparée comme "
+               "à l'entraînement.")
+    if not IMAGE_MODEL.exists():
+        st.error("Modèle d'images introuvable (models/image_model.keras).")
+        return
+    tau = seuil_confiance()
+    photo = st.camera_input("Caméra", key="camera", label_visibility="collapsed")
+    if photo is None:
+        st.info(f"Le navigateur va demander l'autorisation d'utiliser la caméra. Une réponse n'est donnée que si le "
+                f"modèle est sûr à au moins {tau:.0%} ; sinon : « Pokémon non reconnu ».")
+        return
+    res = predict_image(get_image_models(), photo, mode="center_crop")
+    top = res["top"]
+    a, b = st.columns([1, 3])
+    a.image(res["image"], caption="Ce que voit le modèle (recadrage centré)", width=224)
+    with b:
+        if top[0]["proba"] < tau:
+            st.error(f"**Pokémon non reconnu** : la meilleure proposition n'atteint que {top[0]['proba']:.0%} de "
+                     f"confiance (seuil : {tau:.0%}).")
+            st.markdown("Conseils : rapprochez l'image, évitez les reflets et le contre-jour, centrez le Pokémon. "
+                        "Le modèle ne connaît que 142 Pokémon de 1re génération.")
+            st.markdown("Pistes : " + ", ".join(f"{t['name']} ({t['proba']:.0%})" for t in top[:3]))
+            return
+        st.success(f"**#{top[0]['pokedex_number']:03d} {top[0]['name']}** reconnu avec {top[0]['proba']:.0%} de confiance")
+        st.plotly_chart(bar_probas([f"#{t['pokedex_number']:03d} {t['name']}" for t in top[:3]],
+                                   [t["proba"] for t in top[:3]], height=160), config={"displayModeBar": False},
+                        key="top3_camera")
+    afficher_fiche(top[0]["pokedex_number"], models, df, "camera")
+
+
 def tab_a_venir(niveau: str, texte: str):
     st.subheader(f"{niveau} : à venir")
     st.info(texte)
@@ -333,7 +414,7 @@ def main():
     with t2:
         tab_image(models, df)
     with t3:
-        tab_a_venir("Niveau 3", "Capture par la webcam → identification du Pokémon et fiche complète.")
+        tab_camera(models, df)
     with t4:
         tab_a_venir("Niveau 3", "Catalogue des 801 Pokémon : filtres, tri, recherche, organisation par types.")
 

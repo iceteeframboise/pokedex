@@ -180,3 +180,55 @@ def predict_image(models: ImageModels, source, mode: str = "pad", k: int = 5) ->
         out["proba_types_modele_A"] = dict(sorted(zip(models.type_names, map(float, pa)), key=lambda kv: -kv[1]))
         out["types_modele_A"] = [t for t, keep in zip(models.type_names, d) if keep]
     return out
+
+
+# ==========================================================================
+# Niveau 3 : fiche complète d'un Pokémon
+# ==========================================================================
+REFERENCE_DIR = MODELS_DIR.parent / "assets" / "reference"
+# Les colonnes against_* utilisent des noms abrégés pour certains types
+AGAINST_TO_TYPE = {"fight": "fighting"}
+
+
+def _split_japanese(s: str) -> tuple[str, str]:
+    """« Fushigidaneフシギダネ » -> (« Fushigidane », « フシギダネ »)."""
+    import re
+    m = re.match(r"^([\x00-\x7F]*)(.*)$", str(s))
+    return (m.group(1).strip(), m.group(2).strip()) if m else (str(s), "")
+
+
+def reference_image(pokedex_number: int):
+    """Chemin de l'image de référence (Pokémon de 1re génération présents dans le dataset), sinon None."""
+    f = REFERENCE_DIR / f"{int(pokedex_number):03d}.jpg"
+    return f if f.exists() else None
+
+
+def pokemon_card(df: pd.DataFrame, pokedex_number: int) -> dict:
+    """Toutes les informations du CSV sur un Pokémon, mises en forme pour l'affichage."""
+    import ast
+    row = df[df["pokedex_number"] == int(pokedex_number)].iloc[0]
+    romaji, kana = _split_japanese(row.get("japanese_name", ""))
+    try:
+        talents = list(dict.fromkeys(ast.literal_eval(row["abilities"])))      # sans doublons, ordre conservé
+    except (ValueError, SyntaxError):
+        talents = [str(row["abilities"])]
+    mult = {AGAINST_TO_TYPE.get(c[len("against_"):], c[len("against_"):]): float(row[c])
+            for c in df.columns if c.startswith("against_")}
+    return {
+        "pokedex_number": int(row["pokedex_number"]), "name": row["name"],
+        "japanese_romaji": romaji, "japanese_kana": kana,
+        "classification": row.get("classfication", ""),
+        "types": [t for t in (row["type1"], row["type2"]) if t != "aucun"],
+        "height_m": None if pd.isna(row["height_m"]) else float(row["height_m"]),
+        "weight_kg": None if pd.isna(row["weight_kg"]) else float(row["weight_kg"]),
+        "abilities": talents, "generation": int(row["generation"]), "is_legendary": bool(row["is_legendary"]),
+        "stats": {s: int(row[s]) for s in STATS}, "base_total": int(row["base_total"]),
+        "percentage_male": None if pd.isna(row.get("percentage_male")) else float(row["percentage_male"]),
+        "capture_rate": None if pd.isna(row.get("capture_rate")) else int(row["capture_rate"]),
+        "base_egg_steps": int(row["base_egg_steps"]), "base_happiness": int(row["base_happiness"]),
+        "experience_growth": int(row["experience_growth"]),
+        "weaknesses": dict(sorted(((t, m) for t, m in mult.items() if m > 1), key=lambda kv: -kv[1])),
+        "resistances": dict(sorted(((t, m) for t, m in mult.items() if 0 < m < 1), key=lambda kv: kv[1])),
+        "immunities": [t for t, m in mult.items() if m == 0],
+        "reference_image": reference_image(row["pokedex_number"]),
+    }

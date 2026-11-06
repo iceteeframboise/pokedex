@@ -65,3 +65,17 @@ def test_prediction_image():
     assert len(r["top"]) == 5 and abs(sum(t["proba"] for t in r["top"])) <= 1 + 1e-6
     assert all(t in mods.type_names for t in r["types_espece"])
     assert 1 <= len(r["types_modele_A"]) <= 2
+
+
+# --- Niveau 3 : fiche complète ------------------------------------------------
+from src.pokedex_data import pokemon_card
+
+
+def test_fiche_complete():
+    c = pokemon_card(DF, 6)                                    # Dracaufeu
+    assert c["name"] == "Charizard" and c["types"] == ["fire", "flying"]
+    assert c["japanese_kana"] == "リザードン" and c["japanese_romaji"] == "Lizardon"
+    assert c["weaknesses"]["rock"] == 4.0 and "ground" in c["immunities"]
+    assert c["reference_image"] is not None
+    assert pokemon_card(DF, 19)["types"] == ["normal"]         # type corrigé (forme d'Alola dans le CSV)
+    assert pokemon_card(DF, 700)["reference_image"] is None    # pas d'image hors 1re génération
