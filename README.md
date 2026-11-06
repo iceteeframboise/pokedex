@@ -59,7 +59,11 @@ type(s) prédit(s), second avis du modèle de types et fiche complète.
 Onglet **Caméra** (niveau 3) : photo par la webcam (le navigateur demande l'autorisation), recadrage
 centré → Pokémon identifié si la confiance dépasse 70 % (sinon « Pokémon non reconnu ») et **fiche
 complète** : nom japonais, image de référence, types, taille, poids, talents, stats (radar), groupe,
-faiblesses, résistances et immunités. Onglet **Pokédex** (niveau 3) : catalogue des 801 Pokémon (vignettes, stats, groupe), recherche par nom,
+faiblesses, résistances et immunités. Sous la photo, « 📝 Test réel : enregistrer cet essai » note ce
+qui était vraiment présenté (`reports/tables/test_camera.csv`, photos dans `reports/test_camera/`) : voir
+le protocole `docs/protocole_test_camera.md` ; l'analyse est la partie 8 de `notebooks/2_images.ipynb`.
+
+Onglet **Pokédex** (niveau 3) : catalogue des 801 Pokémon (vignettes, stats, groupe), recherche par nom,
 filtres (type 1 ou 2, génération, légendaire, groupe), tri par n'importe quelle stat, clic sur une ligne →
 fiche complète ; vue **« Organisation par types »** : nombre de Pokémon par type, heatmap des stats
 moyennes par type et liste des Pokémon d'un type.

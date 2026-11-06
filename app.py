@@ -15,6 +15,7 @@ Onglets :
 from __future__ import annotations
 
 import html
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -383,12 +384,96 @@ def tab_camera(models, df: pd.DataFrame):
             st.markdown("Conseils : rapprochez l'image, évitez les reflets et le contre-jour, centrez le Pokémon. "
                         "Le modèle ne connaît que 142 Pokémon de 1re génération.")
             st.markdown("Pistes : " + ", ".join(f"{t['name']} ({t['proba']:.0%})" for t in top[:3]))
+            enregistrer_essai(photo, res, tau, df)
+            bilan_essais()
             return
         st.success(f"**#{top[0]['pokedex_number']:03d} {top[0]['name']}** reconnu avec {top[0]['proba']:.0%} de confiance")
         st.plotly_chart(bar_probas([f"#{t['pokedex_number']:03d} {t['name']}" for t in top[:3]],
                                    [t["proba"] for t in top[:3]], height=160), config={"displayModeBar": False},
                         key="top3_camera")
+    enregistrer_essai(photo, res, tau, df)
+    bilan_essais()
     afficher_fiche(top[0]["pokedex_number"], models, df, "camera")
+
+
+# --------------------------------------------------------------------------
+# Test en conditions réelles : enregistrement des essais caméra (étape 3.3)
+# --------------------------------------------------------------------------
+ESSAIS_CSV = Path(__file__).parent / "reports" / "tables" / "test_camera.csv"
+ESSAIS_IMG = Path(__file__).parent / "reports" / "test_camera"
+AUTRE_GEN, PAS_POKEMON = "Autre Pokémon (génération 2 ou plus)", "Pas un Pokémon"
+
+
+def enregistrer_essai(photo, res: dict, tau: float, df: pd.DataFrame):
+    """Formulaire : l'utilisateur indique ce qu'il a VRAIMENT présenté ; l'essai est ajouté au CSV."""
+    import hashlib
+    from datetime import datetime
+    from PIL import Image
+    cle = hashlib.md5(photo.getvalue()).hexdigest()
+    with st.expander("📝 Test réel : enregistrer cet essai", expanded=False):
+        if st.session_state.get("dernier_essai") == cle:
+            st.success("Essai enregistré. Prenez la photo suivante (bouton « Clear photo » puis « Take photo »).")
+            return
+        gen1 = df[df["pokedex_number"] <= 151]
+        options = ["— choisir —"] + [f"#{n:03d} {nm}" for n, nm in zip(gen1["pokedex_number"], gen1["name"])] \
+                  + [AUTRE_GEN, PAS_POKEMON]
+        with st.form(f"essai_{cle}"):
+            vrai = st.selectbox("Ce que vous avez présenté à la caméra", options)
+            c1, c2 = st.columns(2)
+            support = c1.selectbox("Support", ["écran de téléphone", "écran d'ordinateur / tablette", "image imprimée",
+                                               "carte Pokémon", "peluche / figurine", "autre"])
+            lumiere = c2.selectbox("Conditions", ["bonnes (lumière du jour, pas de reflet)", "lumière artificielle",
+                                                  "reflets visibles", "faible lumière", "contre-jour"])
+            note = st.text_input("Remarque (facultatif)", placeholder="ex. image un peu floue, Pokémon petit…")
+            ok = st.form_submit_button("Enregistrer l'essai")
+        if ok:
+            if vrai == "— choisir —":
+                st.warning("Choisissez ce que vous avez présenté.")
+                return
+            num = int(vrai[1:4]) if vrai.startswith("#") else None
+            top = res["top"]
+            accepte = top[0]["proba"] >= tau
+            ESSAIS_IMG.mkdir(parents=True, exist_ok=True)
+            ESSAIS_CSV.parent.mkdir(parents=True, exist_ok=True)
+            n = (sum(1 for _ in open(ESSAIS_CSV, encoding="utf-8")) if ESSAIS_CSV.exists() else 1)
+            fichier = ESSAIS_IMG / f"essai_{n:02d}.jpg"
+            Image.open(photo).convert("RGB").save(fichier, quality=90)
+            ligne = pd.DataFrame([{
+                "essai": n, "date": datetime.now().isoformat(timespec="seconds"),
+                "vrai": vrai if num is None else vrai[5:], "vrai_numero": num,
+                "connu_du_modele": bool(num is not None and any(c["pokedex_number"] == num
+                                                                 for c in get_image_models().classes)),
+                "predit": top[0]["name"], "predit_numero": top[0]["pokedex_number"], "confiance": round(top[0]["proba"], 4),
+                "accepte": accepte, "correct_top1": num == top[0]["pokedex_number"],
+                "correct_top3": num in [t["pokedex_number"] for t in top[:3]],
+                "support": support, "conditions": lumiere, "remarque": note,
+                "image": str(fichier.relative_to(Path(__file__).parent))}])
+            ligne.to_csv(ESSAIS_CSV, mode="a", header=not ESSAIS_CSV.exists(), index=False)
+            st.session_state["dernier_essai"] = cle
+            st.rerun()
+
+
+def bilan_essais():
+    """Bilan en direct des essais enregistrés (comparé au score du jeu de test)."""
+    if not ESSAIS_CSV.exists():
+        return
+    e = pd.read_csv(ESSAIS_CSV)
+    connus = e[e["connu_du_modele"]]
+    inconnus = e[~e["connu_du_modele"]]
+    with st.expander(f"📊 Bilan du test réel : {len(e)} essai(s) enregistré(s)", expanded=False):
+        if len(connus):
+            bon = (connus["accepte"] & connus["correct_top1"]).mean()
+            st.markdown(f"- **Pokémon connus ({len(connus)} essais)** : identifiés correctement **{bon:.0%}** "
+                        f"(score sur le jeu de test : 91 %), « non reconnu » {(~connus['accepte']).mean():.0%}, "
+                        f"erreur affichée {(connus['accepte'] & ~connus['correct_top1']).mean():.0%} ; "
+                        f"bon Pokémon dans le top-3 : {connus['correct_top3'].mean():.0%}")
+        if len(inconnus):
+            st.markdown(f"- **Inconnus du modèle ({len(inconnus)} essais)** : correctement rejetés "
+                        f"(« non reconnu ») **{(~inconnus['accepte']).mean():.0%}**")
+        st.dataframe(e[["essai", "vrai", "predit", "confiance", "accepte", "correct_top1", "support", "conditions"]],
+                     hide_index=True)
+        st.caption(f"Fichier : {ESSAIS_CSV.relative_to(Path(__file__).parent)} — images : "
+                   f"{ESSAIS_IMG.relative_to(Path(__file__).parent)}/")
 
 
 # --------------------------------------------------------------------------
