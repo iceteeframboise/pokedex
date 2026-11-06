@@ -359,6 +359,9 @@ def seuil_confiance() -> float:
     return float(json.loads(IMAGE_CLASSES.read_text(encoding="utf-8")).get("seuil_confiance", 0.7))
 
 
+CAM_AVANT, CAM_ARRIERE = "📷 Webcam / caméra avant", "🔄 Caméra arrière (tablette, téléphone)"
+
+
 def tab_camera(models, df: pd.DataFrame):
     st.subheader("Identifier un Pokémon avec la caméra")
     st.caption("Présentez une image de Pokémon (écran de téléphone, carte, impression…) bien au centre et assez "
@@ -368,10 +371,24 @@ def tab_camera(models, df: pd.DataFrame):
         st.error("Modèle d'images introuvable (models/image_model.keras).")
         return
     tau = seuil_confiance()
-    photo = st.camera_input("Caméra", key="camera", label_visibility="collapsed")
+    # Le choix de la caméra (avant / arrière) ne se règle pas depuis Python : st.camera_input n'affiche son
+    # bouton « Switch camera » que si le navigateur se déclare mobile (souvent pas le cas d'une tablette).
+    # Le mode « caméra arrière » passe donc par l'appareil photo du système (tablette, téléphone), qui ouvre
+    # la caméra arrière et permet de changer de sens.
+    mode_cam = st.segmented_control("Caméra", [CAM_AVANT, CAM_ARRIERE], default=CAM_AVANT, key="mode_camera")
+    if mode_cam == CAM_ARRIERE:
+        st.caption("Touchez **Upload**, puis **Prendre une photo** / **Appareil photo** : "
+                   "l'appareil photo de la tablette s'ouvre, en général sur la caméra arrière (une icône permet de "
+                   "changer de sens). Après la photo, touchez « Utiliser la photo ». Pour l'essai suivant, supprimez "
+                   "la photo avec la croix ✕ puis recommencez.")
+        photo = st.file_uploader("Photo prise avec l'appareil photo", type=["jpg", "jpeg", "png", "webp"],
+                                 key="camera_arriere", label_visibility="collapsed")
+    else:
+        photo = st.camera_input("Caméra", key="camera", label_visibility="collapsed")
     if photo is None:
         st.info(f"Le navigateur va demander l'autorisation d'utiliser la caméra. Une réponse n'est donnée que si le "
-                f"modèle est sûr à au moins {tau:.0%} ; sinon : « Pokémon non reconnu ».")
+                f"modèle est sûr à au moins {tau:.0%} ; sinon : « Pokémon non reconnu ». Sur tablette ou téléphone, "
+                f"choisissez « {CAM_ARRIERE} » pour filmer avec la caméra de dos.")
         bilan_essais()
         return
     res = predict_image(get_image_models(), photo, mode="center_crop")
@@ -413,7 +430,8 @@ def enregistrer_essai(photo, res: dict, tau: float, df: pd.DataFrame):
     cle = hashlib.md5(photo.getvalue()).hexdigest()
     with st.expander("📝 Test réel : enregistrer cet essai", expanded=False):
         if st.session_state.get("dernier_essai") == cle:
-            st.success("Essai enregistré. Prenez la photo suivante (bouton « Clear photo » puis « Take photo »).")
+            st.success("Essai enregistré. Prenez la photo suivante (« Clear photo » puis « Take photo », ou, en mode "
+                       "caméra arrière, la croix ✕ puis une nouvelle photo).")
             return
         gen1 = df[df["pokedex_number"] <= 151]
         options = ["— choisir —"] + [f"#{n:03d} {nm}" for n, nm in zip(gen1["pokedex_number"], gen1["name"])] \

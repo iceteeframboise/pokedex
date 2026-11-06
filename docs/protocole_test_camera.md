@@ -19,8 +19,9 @@ navigateur de la tablette :
 5. **Deploy**. La première installation prend 5 à 10 minutes (TensorFlow est volumineux). On obtient
    ensuite un lien du type `https://….streamlit.app`, qui fonctionne sur n'importe quel appareil.
 
-Sur tablette, la caméra utilisée est souvent celle de face : tenir devant elle le téléphone (ou
-l'impression) qui affiche le Pokémon. Si une icône permet de changer de caméra, on peut prendre celle de dos.
+Sur tablette ou téléphone, choisir **« 🔄 Caméra arrière »** en haut de l'onglet Caméra : on touche
+**Upload**, puis « Prendre une photo », et l'appareil photo de l'appareil s'ouvre sur la caméra de dos
+(une icône permet de changer de sens). Pour l'essai suivant : croix ✕, puis nouvelle photo.
 
 **Important** : en ligne, les essais ne sont pas conservés quand l'appli se met en veille. À la fin,
 ouvrir « 📊 Bilan du test réel » et cliquer sur **⬇️ Télécharger les essais (zip)**, puis déposer le zip
