@@ -63,6 +63,9 @@ faiblesses, résistances et immunités. Sous la photo, « 📝 Test réel : enre
 qui était vraiment présenté (`reports/tables/test_camera.csv`, photos dans `reports/test_camera/`) : voir
 le protocole `docs/protocole_test_camera.md` ; l'analyse est la partie 8 de `notebooks/2_images.ipynb`.
 
+**Mise en ligne** (tablette, téléphone) : Streamlit Community Cloud, https://share.streamlit.io → dépôt
+`iceteeframboise/pokedex`, branche `main`, fichier `app.py`, Python 3.13 (étapes détaillées dans le protocole).
+
 Onglet **Pokédex** (niveau 3) : catalogue des 801 Pokémon (vignettes, stats, groupe), recherche par nom,
 filtres (type 1 ou 2, génération, légendaire, groupe), tri par n'importe quelle stat, clic sur une ligne →
 fiche complète ; vue **« Organisation par types »** : nombre de Pokémon par type, heatmap des stats

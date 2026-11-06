@@ -7,10 +7,29 @@ domaine » : reflets, lumière, flou, perspective, fond, bord du téléphone… 
 
 Durée : environ 15 minutes pour 20 essais.
 
+## 0. Sur tablette ou téléphone : l'appli en ligne
+
+Sans ordinateur, on met l'appli en ligne gratuitement (Streamlit Community Cloud) et on l'ouvre dans le
+navigateur de la tablette :
+
+1. Aller sur https://share.streamlit.io et se connecter avec **GitHub** (« Continue with GitHub »).
+2. **Create app** → « Deploy a public app from GitHub » (ou « Yup, I have an app »).
+3. Repository : `iceteeframboise/pokedex`, Branch : `main`, Main file path : `app.py`.
+4. **Advanced settings** → Python version : **3.13** → Save.
+5. **Deploy**. La première installation prend 5 à 10 minutes (TensorFlow est volumineux). On obtient
+   ensuite un lien du type `https://….streamlit.app`, qui fonctionne sur n'importe quel appareil.
+
+Sur tablette, la caméra utilisée est souvent celle de face : tenir devant elle le téléphone (ou
+l'impression) qui affiche le Pokémon. Si une icône permet de changer de caméra, on peut prendre celle de dos.
+
+**Important** : en ligne, les essais ne sont pas conservés quand l'appli se met en veille. À la fin,
+ouvrir « 📊 Bilan du test réel » et cliquer sur **⬇️ Télécharger les essais (zip)**, puis déposer le zip
+sur GitHub (dossier `reports/`, « Add file → Upload files ») ou l'envoyer dans la conversation.
+
 ## 1. Préparer
 
 1. Lancer l'appli **sur votre ordinateur**, dans le dossier `pokedex` : `streamlit run app.py`
-   (installation : voir le README). Ouvrir l'onglet **📷 Caméra** et autoriser la caméra dans le navigateur.
+   (installation : voir le README), ou ouvrir l'appli en ligne (partie 0). Ouvrir l'onglet **📷 Caméra** et autoriser la caméra dans le navigateur.
 2. Préparer les images à présenter, par exemple sur votre téléphone (recherche d'images), ou en
    imprimant quelques images :
    - **15 Pokémon différents de 1re génération** (n° 1 à 151), variés : faciles (Pikachu, Dracaufeu,

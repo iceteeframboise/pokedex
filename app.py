@@ -372,6 +372,7 @@ def tab_camera(models, df: pd.DataFrame):
     if photo is None:
         st.info(f"Le navigateur va demander l'autorisation d'utiliser la caméra. Une réponse n'est donnée que si le "
                 f"modèle est sûr à au moins {tau:.0%} ; sinon : « Pokémon non reconnu ».")
+        bilan_essais()
         return
     res = predict_image(get_image_models(), photo, mode="center_crop")
     top = res["top"]
@@ -474,6 +475,17 @@ def bilan_essais():
                      hide_index=True)
         st.caption(f"Fichier : {ESSAIS_CSV.relative_to(Path(__file__).parent)} — images : "
                    f"{ESSAIS_IMG.relative_to(Path(__file__).parent)}/")
+        # En ligne (Streamlit Community Cloud), les fichiers écrits par l'appli ne sont pas conservés :
+        # on propose donc de télécharger les essais (tableau + photos) dans un zip.
+        import io
+        import zipfile
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(ESSAIS_CSV, "reports/tables/test_camera.csv")
+            for f in sorted(ESSAIS_IMG.glob("*.jpg")):
+                z.write(f, f"reports/test_camera/{f.name}")
+        st.download_button("⬇️ Télécharger les essais (zip)", buf.getvalue(), file_name="test_camera.zip",
+                           mime="application/zip")
 
 
 # --------------------------------------------------------------------------
