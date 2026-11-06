@@ -8,7 +8,7 @@ L'appli charge les modèles sauvegardés dans models/ (produits par
 
 Onglets :
     Statistiques  (niveau 1) : 6 stats -> groupe, probabilité d'être légendaire, top-3 des types
-    Image         (niveau 2) : à venir
+    Image         (niveau 2) : image importée -> Pokémon reconnu (top-3) et types prédits
     Caméra        (niveau 3) : à venir
     Pokédex       (niveau 3) : à venir
 """
@@ -22,8 +22,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.config import STAT_LABELS, STATS, TYPE_FR
-from src.pokedex_data import (STAT_MAX, STAT_MIN, load_pokemon, load_tabular_models,
-                              missing_model_files, nearest_pokemon, predict_stats)
+from src.pokedex_data import (IMAGE_CLASSES, IMAGE_MODEL, STAT_MAX, STAT_MIN, load_image_models,
+                              load_pokemon, load_tabular_models, missing_model_files, nearest_pokemon,
+                              predict_image, predict_stats)
 
 st.set_page_config(page_title="Mon Pokédex", page_icon="🔴", layout="wide")
 
@@ -40,6 +41,11 @@ DEFAULT_POKEMON = "Pikachu"
 @st.cache_resource(show_spinner="Chargement des modèles…")
 def get_models():
     return load_tabular_models()
+
+
+@st.cache_resource(show_spinner="Chargement du réseau de neurones (≈ 10 s la première fois)…")
+def get_image_models():
+    return load_image_models()
 
 
 @st.cache_data(show_spinner=False)
@@ -212,6 +218,98 @@ def tab_statistiques(models, df: pd.DataFrame):
             st.caption("Distance euclidienne sur les stats standardisées (la même que celle du K-means).")
 
 
+# --------------------------------------------------------------------------
+# Onglet 2 : image
+# --------------------------------------------------------------------------
+def nom_types(types) -> str:
+    return " / ".join(TYPE_FR.get(t, t) for t in types if t != "aucun")
+
+
+def bar_probas(labels, probas, couleurs=None, height=200) -> go.Figure:
+    fig = go.Figure(go.Bar(x=probas[::-1], y=labels[::-1], orientation="h",
+                           marker_color=(couleurs or [COLOR_POKEMON] * len(labels))[::-1],
+                           text=[f"{p:.0%}" for p in probas[::-1]], textposition="outside",
+                           hovertemplate="%{y} : %{x:.1%}<extra></extra>"))
+    fig.update_layout(xaxis=dict(range=[0, 1.15], tickformat=".0%"), margin=dict(l=10, r=10, t=10, b=30),
+                      height=height, showlegend=False)
+    return fig
+
+
+def afficher_resultat_image(res: dict, models, df: pd.DataFrame, cle: str):
+    """Affiche le top-3 des espèces, les types et une fiche rapide (partagé par Image et Caméra)."""
+    top = res["top"]
+    p1 = top[0]["proba"]
+    c1, c2 = st.columns([1, 1], gap="large")
+    with c1, st.container(border=True):
+        st.markdown("**Pokémon reconnu (top-3)**")
+        if p1 >= 0.5:
+            st.markdown(f"<div style='font-size:1.6rem;font-weight:700'>#{top[0]['pokedex_number']:03d} "
+                        f"{html.escape(top[0]['name'])}</div>", unsafe_allow_html=True)
+        else:
+            st.warning("Le modèle hésite : la meilleure proposition a moins de 50 % de probabilité.")
+        st.plotly_chart(bar_probas([f"#{t['pokedex_number']:03d} {t['name']}" for t in top[:3]],
+                                   [t["proba"] for t in top[:3]]), config={"displayModeBar": False},
+                        key=f"top3_{cle}")
+        st.caption("Modèle : EfficientNetB0 fine-tuné, 142 Pokémon de 1re génération "
+                   "(bonne espèce dans 91 % des cas sur le jeu de test, dans le top-3 dans ≈ 96 %).")
+    with c2, st.container(border=True):
+        st.markdown("**Type(s) prédit(s)**")
+        st.markdown(f"<div style='font-size:1.4rem;font-weight:700'>{html.escape(nom_types(res['types_espece']))}</div>",
+                    unsafe_allow_html=True)
+        st.caption("Types du Pokémon reconnu (lus dans pokemon.csv). Probabilité de chaque type = somme des "
+                   "probabilités des Pokémon qui l'ont :")
+        pt = list(res["proba_types_espece"].items())[:4]
+        st.plotly_chart(bar_probas([TYPE_FR[t] for t, _ in pt], [v for _, v in pt], height=170),
+                        config={"displayModeBar": False}, key=f"types_{cle}")
+        if "types_modele_A" in res:
+            pa = list(res["proba_types_modele_A"].items())[:3]
+            accord = set(res["types_modele_A"]) == set(res["types_espece"])
+            st.markdown(f"Second avis (modèle qui prédit les types directement) : **{nom_types(res['types_modele_A'])}** "
+                        + ("✅ concordant" if accord else "⚠️ différent"))
+            st.caption(" · ".join(f"{TYPE_FR[t]} {v:.0%}" for t, v in pa))
+
+    # Fiche rapide du Pokémon reconnu, avec les modèles du niveau 1
+    row = df[df["pokedex_number"] == top[0]["pokedex_number"]].iloc[0]
+    stats = {s: int(row[s]) for s in STATS}
+    r = predict_stats(models, stats)
+    with st.container(border=True):
+        st.markdown(f"**Fiche rapide : {html.escape(row['name'])}**")
+        f1, f2 = st.columns([2, 3])
+        with f1:
+            st.markdown(f"- Groupe (niveau 1) : **{r['cluster']['name']}**\n"
+                        f"- Total des stats : **{int(row['base_total'])}**\n"
+                        f"- Légendaire : **{'oui' if row['is_legendary'] else 'non'}** "
+                        f"(probabilité prédite par les stats : {r['p_legendary']:.0%})\n"
+                        f"- Génération : {int(row['generation'])}")
+        with f2:
+            st.plotly_chart(radar(stats, r["cluster"], df[STATS].mean(), row["name"]),
+                            config={"displayModeBar": False}, key=f"radar_{cle}")
+
+
+def tab_image(models, df: pd.DataFrame):
+    st.subheader("Reconnaître un Pokémon à partir d'une image")
+    st.caption("Importez une image d'un Pokémon de 1re génération (dessin, capture, photo…). Elle est préparée "
+               "exactement comme à l'entraînement : fond blanc, carré, 224 × 224 pixels.")
+    if not IMAGE_MODEL.exists() or not IMAGE_CLASSES.exists():
+        st.error("Modèle d'images introuvable (models/image_model.keras). Voir notebooks/2_images.ipynb, partie 6.")
+        return
+    fichier = st.file_uploader("Image du Pokémon", type=["png", "jpg", "jpeg", "gif", "webp", "bmp"],
+                               key="upload_image")
+    if fichier is None:
+        st.info("En attente d'une image. Astuce : une image où le Pokémon est bien visible et occupe une "
+                "bonne partie du cadre donne les meilleurs résultats.")
+        return
+    try:
+        res = predict_image(get_image_models(), fichier, mode="pad")
+    except Exception as e:                                    # fichier illisible, format exotique…
+        st.error(f"Impossible de lire cette image : {e}")
+        return
+    a, b, _ = st.columns([1, 1, 2])
+    a.image(fichier, caption="Image importée", width=260)
+    b.image(res["image"], caption="Ce que voit le modèle (224 × 224)", width=224)
+    afficher_resultat_image(res, models, df, "image")
+
+
 def tab_a_venir(niveau: str, texte: str):
     st.subheader(f"{niveau} : à venir")
     st.info(texte)
@@ -233,7 +331,7 @@ def main():
     with t1:
         tab_statistiques(models, df)
     with t2:
-        tab_a_venir("Niveau 2", "Upload d'une image → types prédits avec leurs probabilités.")
+        tab_image(models, df)
     with t3:
         tab_a_venir("Niveau 3", "Capture par la webcam → identification du Pokémon et fiche complète.")
     with t4:

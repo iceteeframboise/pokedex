@@ -53,7 +53,25 @@ choisir un Pokémon existant pour préremplir les 6 stats, ou les saisir libreme
 - le **type prédit** et les 3 types les plus probables ;
 - un **radar** des stats comparé au profil moyen du groupe, et les Pokémon existants les plus proches.
 
-Les onglets Image, Caméra et Pokédex sont réservés aux niveaux 2 et 3.
+Onglet **Image** (niveau 2) : importer une image d'un Pokémon de 1re génération → Pokémon reconnu (top-3),
+type(s) prédit(s), second avis du modèle de types et fiche rapide. Les onglets Caméra et Pokédex sont réservés au niveau 3.
+
+## Niveau 2 : images
+
+Les modèles d'images sont fournis dans `models/` (`image_model.keras`, `image_model_types.keras`,
+`image_classes.json`, `seuils_types.npy`) : l'onglet **Image** de l'appli fonctionne sans les données.
+
+Pour refaire les expériences du notebook `notebooks/2_images.ipynb`, il faut les images (≈ 3 Go, hors git) :
+
+```bash
+python -m src.image_utils          # télécharge le dataset Kaggle, nettoie, exporte data/images_clean/
+python -m src.train_images --model cnn_scratch --approach B        # CNN de zéro (≈ 1 h 30 sur CPU)
+python -m src.train_images --finetune efficientnet_b0 --approach B # fine-tuning (≈ 50 min sur CPU)
+```
+
+Sans accès à kaggle.com, téléchargez l'archive à la main
+(https://www.kaggle.com/datasets/mikoajkolman/pokemon-images-first-generation17000-files)
+et décompressez-la dans `data/images/` (on doit obtenir `data/images/pokemon/<NomDuPokémon>/…`).
 
 ## Tests
 
@@ -65,16 +83,19 @@ python -m pytest
 
 ```
 data/pokemon.csv          dataset Kaggle (801 Pokémon)
-data/images/              images de la 1re génération (niveau 2, à venir)
+data/images/              images de la 1re génération (niveau 2, hors git)
+data/images_index.csv     inventaire et décision de nettoyage de chaque image
+data/images_splits.csv    découpages train/val/test et plis groupés par espèce
 notebooks/1_tabulaire.ipynb   niveau 1 : EDA, clustering, classification (commenté)
-notebooks/2_images.ipynb      niveau 2 : images (à venir)
+notebooks/2_images.ipynb      niveau 2 : images (nettoyage, référence classique, CNN, transfer learning, couverture, Grad-CAM)
 src/config.py             graine (42), chemins, colonnes utilisées / exclues
 src/preprocessing.py      chargement, nettoyage, split stratifié, prétraitement
 src/clustering.py         noms et interprétation des clusters
 src/viz.py                style graphique commun
 src/pokedex_data.py       chargement des modèles et prédictions pour l'appli
 src/train_tabular.py      entraîne et sauvegarde les modèles du niveau 1
-src/train_images.py, src/image_utils.py   (niveau 2, à venir)
+src/image_utils.py        images : association au CSV, nettoyage, doublons, découpages, métriques
+src/train_images.py       réseaux de neurones : augmentation, CNN, transfer learning, Grad-CAM
 models/                   modèles sauvegardés (.joblib, .pt)
 reports/figures/          figures exportées pour le rapport
 reports/tables/           tableaux récapitulatifs (CSV) pour le rapport

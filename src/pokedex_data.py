@@ -113,3 +113,70 @@ def nearest_pokemon(df: pd.DataFrame, models: TabularModels, stats: dict, k: int
     if exclude_name:
         out = out[out["name"] != exclude_name]
     return out.nsmallest(k, "distance")
+
+
+# ==========================================================================
+# Niveau 2 : prédiction à partir d'une image
+# ==========================================================================
+IMAGE_MODEL = MODELS_DIR / "image_model.keras"            # approche B : 142 espèces (modèle retenu)
+IMAGE_MODEL_TYPES = MODELS_DIR / "image_model_types.keras"  # approche A : 17 types (second avis)
+IMAGE_CLASSES = MODELS_DIR / "image_classes.json"         # indice de classe <-> numéro de Pokédex
+IMAGE_THRESHOLDS = MODELS_DIR / "seuils_types.npy"        # seuils par type de l'approche A
+
+
+@dataclass
+class ImageModels:
+    species: object
+    types: object | None
+    classes: list[dict]          # [{"index", "pokedex_number", "name", "type1", "type2"}, ...]
+    type_names: list[str]
+    thresholds: np.ndarray | None
+
+
+def load_image_models(with_types: bool = True) -> ImageModels:
+    """Charge le modèle d'images retenu (et, en option, le modèle de types)."""
+    import os
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+    import keras
+    import src.train_images  # noqa: F401  (enregistre la loss WeightedBCE pour la désérialisation)
+    meta = json.loads(IMAGE_CLASSES.read_text(encoding="utf-8"))
+    types = None
+    if with_types and IMAGE_MODEL_TYPES.exists():
+        types = keras.saving.load_model(IMAGE_MODEL_TYPES, compile=False)
+    return ImageModels(species=keras.saving.load_model(IMAGE_MODEL, compile=False), types=types,
+                       classes=meta["classes"], type_names=meta["types"],
+                       thresholds=np.load(IMAGE_THRESHOLDS) if IMAGE_THRESHOLDS.exists() else None)
+
+
+def prepare_image(source, mode: str = "pad") -> np.ndarray:
+    """Même prétraitement qu'à l'entraînement : RGB sur fond blanc, carré, 224 x 224.
+
+    mode="pad" pour une image importée (on ne coupe pas le Pokémon),
+    mode="center_crop" pour la caméra (le Pokémon est au centre du cadre).
+    """
+    from src.image_utils import IMG_SIZE, load_rgb, to_square
+    return np.asarray(to_square(load_rgb(source), IMG_SIZE, mode=mode), dtype=np.float32)
+
+
+def predict_image(models: ImageModels, source, mode: str = "pad", k: int = 5) -> dict:
+    """Espèces les plus probables + types (déduits de l'espèce, et second avis du modèle A)."""
+    x = prepare_image(source, mode)[None]
+    p = models.species.predict(x, verbose=0)[0]
+    order = np.argsort(p)[::-1]
+    top = [{**models.classes[i], "proba": float(p[i])} for i in order[:k]]
+
+    # P(type) = somme des probabilités des espèces qui ont ce type
+    p_type_B = {t: 0.0 for t in models.type_names}
+    for c, pc in zip(models.classes, p):
+        for t in {c["type1"], c["type2"]} - {"aucun"}:
+            p_type_B[t] += float(pc)
+    out = {"top": top, "types_espece": [t for t in (top[0]["type1"], top[0]["type2"]) if t != "aucun"],
+           "proba_types_espece": dict(sorted(p_type_B.items(), key=lambda kv: -kv[1])),
+           "image": x[0].astype(np.uint8)}
+    if models.types is not None:
+        from src.image_utils import decide_types
+        pa = models.types.predict(x, verbose=0)[0]
+        d = decide_types(pa[None], models.thresholds if models.thresholds is not None else 0.5)[0]
+        out["proba_types_modele_A"] = dict(sorted(zip(models.type_names, map(float, pa)), key=lambda kv: -kv[1]))
+        out["types_modele_A"] = [t for t, keep in zip(models.type_names, d) if keep]
+    return out
